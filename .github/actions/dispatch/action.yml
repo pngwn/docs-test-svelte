@@ -1,0 +1,7 @@
+name: "Dispatch Docs"
+
+description: "Dispatch docs to main repo"
+
+runs:
+  using: "node12"
+  main: "dist/main.js"
