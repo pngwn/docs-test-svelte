@@ -12,6 +12,7 @@ var util = require('util');
 var Stream = require('stream');
 var Url = require('url');
 var zlib = require('zlib');
+var path = require('path');
 
 function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
 
@@ -25,6 +26,7 @@ var util__default = /*#__PURE__*/_interopDefaultLegacy(util);
 var Stream__default = /*#__PURE__*/_interopDefaultLegacy(Stream);
 var Url__default = /*#__PURE__*/_interopDefaultLegacy(Url);
 var zlib__default = /*#__PURE__*/_interopDefaultLegacy(zlib);
+var path__default = /*#__PURE__*/_interopDefaultLegacy(path);
 
 var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
@@ -5618,10 +5620,21 @@ exports.getOctokit = getOctokit;
 
 var github$1 = /*@__PURE__*/getDefaultExportFromCjs(github);
 
-function run() {
+async function run() {
 	console.log(JSON.stringify(github$1, null, 2));
 	const { context: { eventName, payload } } = github$1;
-	console.log(eventName, payload);
+	console.log(eventName, payload, process.env);
+	console.log(__dirname);
+	try {
+		const p = fs_1__default['default'].readFileSync(path__default['default'].join('.', 'package.json'));
+		console.log(p);
+	} catch(e) {
+		console.log("it didn't work");
+	}
+
+	
+
+
 	switch (eventName) {
 		case 'release':
 
