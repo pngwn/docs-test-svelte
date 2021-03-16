@@ -2,6 +2,12 @@ name: "Dispatch Docs"
 
 description: "Dispatch docs to main repo"
 
+inputs:
+  base:
+    description: 'Location for base documentation'
+    required: true
+    default: 'docs'
+
 runs:
   using: "node12"
   main: "dist/main.js"
