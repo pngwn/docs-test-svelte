@@ -6038,7 +6038,7 @@ async function run() {
 
 		const files = await Promise.all(
 			file_paths
-				.filter(({ type }) => type !== "examples" && type !== "tutorial")
+				.filter(({ type }) => type !== "examples" && type !== "tutorials")
 				.reduce(
 					(acc, { type, files }) => [
 						...acc,
