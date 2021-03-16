@@ -13,7 +13,6 @@ var Stream = require('stream');
 var Url = require('url');
 var zlib = require('zlib');
 var require$$1 = require('path');
-var fs$1 = require('fs/promises');
 
 function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
 
@@ -28,7 +27,6 @@ var Stream__default = /*#__PURE__*/_interopDefaultLegacy(Stream);
 var Url__default = /*#__PURE__*/_interopDefaultLegacy(Url);
 var zlib__default = /*#__PURE__*/_interopDefaultLegacy(zlib);
 var require$$1__default = /*#__PURE__*/_interopDefaultLegacy(require$$1);
-var fs__default = /*#__PURE__*/_interopDefaultLegacy(fs$1);
 
 var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
@@ -6006,14 +6004,14 @@ var core$1 = /*@__PURE__*/getDefaultExportFromCjs(core);
 
 function get_file_with_name(base, type) {
 	return new Promise(async (rs, rj) => {
-		fs__default['default'].readdir(require$$1__default['default'].join(base, type))
+		fs_1.promises.readdir(require$$1__default['default'].join(base, type))
 			.then((files) => rs({ type, files }))
 			.catch(rj);
 	});
 }
 function read_file_with_meta(base, type, path) {
 	return new Promise(async (rs, rj) => {
-		fs__default['default'].readFile(path.join(base, type, path))
+		fs_1.promises.readFile(path.join(base, type, path))
 			.then((content) => rs({ type, path, content }))
 			.catch(rj);
 	});
@@ -6031,7 +6029,7 @@ async function run() {
 	console.log(__dirname);
 
 	try {
-		const dirs = await fs__default['default'].readdir(base);
+		const dirs = await fs_1.promises.readdir(base);
 		console.log("contents of base dir");
 		const file_paths = await await Promise.all(
 			dirs.map((f) => get_file_with_name(base, f))
