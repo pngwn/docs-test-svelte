@@ -10,10 +10,10 @@ function get_file_with_name(base, type) {
 			.catch(rj);
 	});
 }
-function read_file_with_meta(base, type, path) {
+function read_file_with_meta(base, type, path_name) {
 	return new Promise(async (rs, rj) => {
-		fs.readFile(path.join(base, type, path))
-			.then((content) => rs({ type, path, content }))
+		fs.readFile(path.join(base, type, path_name))
+			.then((content) => rs({ type, path: path_name, content }))
 			.catch(rj);
 	});
 }

@@ -12,7 +12,7 @@ var util = require('util');
 var Stream = require('stream');
 var Url = require('url');
 var zlib = require('zlib');
-var require$$1 = require('path');
+var path = require('path');
 
 function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
 
@@ -26,7 +26,7 @@ var util__default = /*#__PURE__*/_interopDefaultLegacy(util);
 var Stream__default = /*#__PURE__*/_interopDefaultLegacy(Stream);
 var Url__default = /*#__PURE__*/_interopDefaultLegacy(Url);
 var zlib__default = /*#__PURE__*/_interopDefaultLegacy(zlib);
-var require$$1__default = /*#__PURE__*/_interopDefaultLegacy(require$$1);
+var path__default = /*#__PURE__*/_interopDefaultLegacy(path);
 
 var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
@@ -5782,7 +5782,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 
 
 const os = __importStar(require$$0__default['default']);
-const path = __importStar(require$$1__default['default']);
+const path = __importStar(path__default['default']);
 /**
  * The code to exit an action
  */
@@ -6004,15 +6004,15 @@ var core$1 = /*@__PURE__*/getDefaultExportFromCjs(core);
 
 function get_file_with_name(base, type) {
 	return new Promise(async (rs, rj) => {
-		fs_1.promises.readdir(require$$1__default['default'].join(base, type))
+		fs_1.promises.readdir(path__default['default'].join(base, type))
 			.then((files) => rs({ type, files }))
 			.catch(rj);
 	});
 }
-function read_file_with_meta(base, type, path) {
+function read_file_with_meta(base, type, path_name) {
 	return new Promise(async (rs, rj) => {
-		fs_1.promises.readFile(path.join(base, type, path))
-			.then((content) => rs({ type, path, content }))
+		fs_1.promises.readFile(path__default['default'].join(base, type, path_name))
+			.then((content) => rs({ type, path: path_name, content }))
 			.catch(rj);
 	});
 }
