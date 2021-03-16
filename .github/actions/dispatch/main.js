@@ -3,15 +3,15 @@ import github from "@actions/github";
 
 function run() {
 	console.log(JSON.stringify(github, null, 2));
-	const {context: { eventName, payload } } = github;
-
+	const { context: { eventName, payload } } = github;
+	console.log(eventName, payload)
 	switch (eventName) {
 		case 'release':
 
 			console.log(`new release for ${payload.release.tag_name}`)
 			break;
 		case 'push':
-			
+
 			console.log(`unreleased docs`);
 			break;
 		default:

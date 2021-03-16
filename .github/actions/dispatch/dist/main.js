@@ -5620,18 +5620,20 @@ var github$1 = /*@__PURE__*/getDefaultExportFromCjs(github);
 
 function run() {
 	console.log(JSON.stringify(github$1, null, 2));
-	const {context: { eventName, payload } } = github$1;
-
+	const { context: { eventName, payload } } = github$1;
+	console.log(eventName, payload);
 	switch (eventName) {
 		case 'release':
 
 			console.log(`new release for ${payload.release.tag_name}`);
 			break;
 		case 'push':
-			
+
 			console.log(`unreleased docs`);
 			break;
 	}
+
+	
 
 
 	
