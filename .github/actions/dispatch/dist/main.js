@@ -6073,7 +6073,7 @@ async function run() {
 			ref,
 			inputs: {
 				type: release_type,
-				docs: webhook_payload,
+				docs: JSON.stringify(webhook_payload),
 			},
 		});
 		console.log(x);
