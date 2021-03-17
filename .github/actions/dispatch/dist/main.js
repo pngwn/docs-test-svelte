@@ -6073,7 +6073,7 @@ async function run() {
 			ref,
 			inputs: {
 				type: release_type,
-				repo,
+				repo: repo.repo,
 				base,
 			},
 		});
