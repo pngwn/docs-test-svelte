@@ -72,6 +72,10 @@ async function run() {
 			repo: "docs-test-shell",
 			workflow_id: "publish_docs.yml",
 			ref,
+			inputs: {
+				type: release_type,
+				docs: webhook_payload,
+			},
 		});
 		console.log(x);
 	} catch (e) {

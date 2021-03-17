@@ -6027,7 +6027,8 @@ async function run() {
 		context: { eventName, payload, ref },
 	} = github$1;
 
-	eventName === "release" ? payload.release.tag_name : "next";
+	const release_type =
+		eventName === "release" ? payload.release.tag_name : "next";
 
 	console.log(eventName, payload, process.env);
 	console.log(__dirname);
@@ -6070,6 +6071,10 @@ async function run() {
 			repo: "docs-test-shell",
 			workflow_id: "publish_docs.yml",
 			ref,
+			inputs: {
+				type: release_type,
+				docs: webhook_payload,
+			},
 		});
 		console.log(x);
 	} catch (e) {
