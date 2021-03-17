@@ -13,4 +13,4 @@ jobs:
         id: projects
         uses: ./.github/actions/dispatch
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.WORKFLOW_TOKEN }}
