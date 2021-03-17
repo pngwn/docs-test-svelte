@@ -22,9 +22,10 @@ function read_file_with_meta(base, type, path_name) {
 
 async function run() {
 	const base = core.getInput("base");
+	const token = core.getInput("token");
 
 	const {
-		context: { eventName, payload },
+		context: { eventName, payload, ref },
 	} = github;
 
 	const release_type =
@@ -62,7 +63,17 @@ async function run() {
 			}
 		}, {});
 
-		console.log(payload);
+		console.log(webhook_payload);
+
+		const octokit = github.getOctokit(myToken);
+
+		const x = await octokit.actions.createWorkflowDispatch({
+			owner: "pngwn",
+			repo: "docs-test-shell",
+			workflow_id: "publish_docs.yml",
+			ref,
+		});
+		console.log(x);
 	} catch (e) {
 		console.log("it didn't work", e.message);
 	}

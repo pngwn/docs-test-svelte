@@ -12,3 +12,5 @@ jobs:
       - name: publish
         id: projects
         uses: ./.github/actions/dispatch
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
