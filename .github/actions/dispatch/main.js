@@ -28,6 +28,10 @@ async function run() {
 	const aws_key_id = core.getInput("aws_key_id");
 	const aws_secret_access_key = core.getInput("aws_secret_access_key");
 
+	const {
+		context: { eventName, payload, ref, repo },
+	} = github;
+
 	await exec.exec("zip", [`${base}.zip`, base, "-r"]);
 
 	await exec.exec("aws", ["configure", "set", "aws_access_key_id", aws_key_id]);
@@ -38,11 +42,15 @@ async function run() {
 		aws_secret_access_key,
 	]);
 
-	await exec.exec("cat", ["~/.aws/credentials"]);
+	await exec.exec("aws", [
+		"s3",
+		"sync",
+		`${base}.zip`,
+		`s3://svelte-docs/${repo.repo}@next`,
+	]);
+	// aws s3 sync docs.zip s3://my-bucket/svelte@v3.28.0
 
-	const {
-		context: { eventName, payload, ref, repo },
-	} = github;
+	// await exec.exec("cat", ["~/.aws/credentials"]);
 
 	const release_type =
 		eventName === "release" ? payload.release.tag_name : "next";
