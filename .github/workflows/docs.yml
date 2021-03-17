@@ -12,7 +12,7 @@ jobs:
       - run: aws configure set aws_access_key_id ${{ secrets.AWS_KEY }}
       - run: aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET }}
       - run: zip docs.zip docs -r
-      - run: s3 sync docs.zip s3://svelte-docs/svelte-test-docs@next.zip
+      - run: aws s3 sync docs.zip s3://svelte-docs/svelte-test-docs@next.zip
       # - name: publish
       #   id: projects
       #   uses: ./.github/actions/dispatch
