@@ -65,7 +65,7 @@ async function run() {
 
 		console.log(webhook_payload);
 
-		const octokit = github.getOctokit(myToken);
+		const octokit = github.getOctokit(token);
 
 		const x = await octokit.actions.createWorkflowDispatch({
 			owner: "pngwn",

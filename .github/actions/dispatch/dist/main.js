@@ -6021,7 +6021,7 @@ function read_file_with_meta(base, type, path_name) {
 
 async function run() {
 	const base = core$1.getInput("base");
-	core$1.getInput("token");
+	const token = core$1.getInput("token");
 
 	const {
 		context: { eventName, payload, ref },
@@ -6063,7 +6063,7 @@ async function run() {
 
 		console.log(webhook_payload);
 
-		const octokit = github$1.getOctokit(myToken);
+		const octokit = github$1.getOctokit(token);
 
 		const x = await octokit.actions.createWorkflowDispatch({
 			owner: "pngwn",
