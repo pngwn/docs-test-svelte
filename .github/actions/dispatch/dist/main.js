@@ -6021,11 +6021,12 @@ function read_file_with_meta(base, type, path_name) {
 
 async function run() {
 	const base = core$1.getInput("base");
-	console.log(base);
 
 	const {
 		context: { eventName, payload },
 	} = github$1;
+
+	eventName === "release" ? payload.release.tag_name : "next";
 
 	console.log(eventName, payload, process.env);
 	console.log(__dirname);
@@ -6036,7 +6037,6 @@ async function run() {
 		const file_paths = await await Promise.all(
 			dirs.map((f) => get_file_with_name(base, f))
 		);
-		console.log(file_paths);
 
 		const files = await Promise.all(
 			file_paths
@@ -6051,9 +6051,7 @@ async function run() {
 				.map(({ type, file }) => read_file_with_meta(base, type, file))
 		);
 
-		console.log(files);
-
-		const payload = files.reduce((acc, { type, content, file }) => {
+		payload = files.reduce((acc, { type, content, file }) => {
 			if (!acc[type]) {
 				return { ...acc, [type]: [{ file, content }] };
 			} else {
@@ -6062,20 +6060,11 @@ async function run() {
 		}, {});
 
 		console.log(payload);
-
-		console.log(p);
 	} catch (e) {
-		console.log("it didn't work");
+		console.log("it didn't work", e.message);
 	}
 
-	switch (eventName) {
-		case "release":
-			console.log(`new release for ${payload.release.tag_name}`);
-			break;
-		case "push":
-			console.log(`unreleased docs`);
-			break;
-	}
+	console.log("boo, not bad it worked");
 
 	// console.log(JSON.stringify(github.payload, null, 2));
 }
