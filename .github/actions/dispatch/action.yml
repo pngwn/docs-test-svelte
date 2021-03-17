@@ -10,7 +10,12 @@ inputs:
   token:
     description: "token to trigger workflow elsewhere"
     required: true
-    default: "docs"
+  aws_key_id:
+    description: "AWS Key ID"
+    required: true
+  aws_secret_access_key:
+    description: "AWS Secret Access Key"
+    required: true
 
 runs:
   using: "node12"

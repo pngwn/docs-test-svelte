@@ -1,4 +1,5 @@
 import github from "@actions/github";
+import exec from "@actions/exec";
 import core from "@actions/core";
 import { promises as fs } from "fs";
 import path from "path";
@@ -10,6 +11,7 @@ function get_file_with_name(base, type) {
 			.catch(rj);
 	});
 }
+
 function read_file_with_meta(base, type, path_name) {
 	return new Promise(async (rs, rj) => {
 		fs.readFile(path.join(base, type, path_name))
@@ -23,6 +25,20 @@ function read_file_with_meta(base, type, path_name) {
 async function run() {
 	const base = core.getInput("base");
 	const token = core.getInput("token");
+	const aws_key_id = core.getInput("aws_key_id");
+	const aws_secret_access_key = core.getInput("aws_secret_access_key");
+
+	await exec.exec("zip", [`${base}.zip`, base, "-r"]);
+
+	await exec.exec("aws", ["configure", "set", "aws_access_key_id", aws_key_id]);
+	await exec.exec("aws", [
+		"configure",
+		"set",
+		"aws_secret_access_key",
+		aws_secret_access_key,
+	]);
+
+	await exec.exec("cat", ["~/.aws/credentials"]);
 
 	const {
 		context: { eventName, payload, ref, repo },
@@ -36,24 +52,26 @@ async function run() {
 	let webhook_payload;
 
 	try {
-		const dirs = await fs.readdir(base);
-		console.log("contents of base dir");
-		const file_paths = await await Promise.all(
-			dirs.map((f) => get_file_with_name(base, f))
-		);
+		// 	const dirs = await fs.readdir(base);
+		// 	console.log("contents of base dir");
+		// 	const file_paths = await await Promise.all(
+		// 		dirs.map((f) => get_file_with_name(base, f))
+		// 	);
 
-		const files = await Promise.all(
-			file_paths
-				.filter(({ type }) => type !== "examples" && type !== "tutorials")
-				.reduce(
-					(acc, { type, files }) => [
-						...acc,
-						...files.map((f) => ({ type, file: f })),
-					],
-					[]
-				)
-				.map(({ type, file }) => read_file_with_meta(base, type, file))
-		);
+		// 	const files = await Promise.all(
+		// 		file_paths
+		// 			.filter(({ type }) => type !== "examples" && type !== "tutorials")
+		// 			.reduce(
+		// 				(acc, { type, files }) => [
+		// 					...acc,
+		// 					...files.map((f) => ({ type, file: f })),
+		// 				],
+		// 				[]
+		// 			)
+		// 			.map(({ type, file }) => read_file_with_meta(base, type, file))
+		// 	);
+
+		// TODO: can i send a list of file?
 
 		webhook_payload = files.reduce((acc, { type, content, file }) => {
 			if (!acc[type]) {
