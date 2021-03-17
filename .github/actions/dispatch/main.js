@@ -32,6 +32,7 @@ async function run() {
 
 	console.log(eventName, payload, process.env);
 	console.log(__dirname);
+	let webhook_payload;
 
 	try {
 		const dirs = await fs.readdir(base);
@@ -53,7 +54,7 @@ async function run() {
 				.map(({ type, file }) => read_file_with_meta(base, type, file))
 		);
 
-		payload = files.reduce((acc, { type, content, file }) => {
+		webhook_payload = files.reduce((acc, { type, content, file }) => {
 			if (!acc[type]) {
 				return { ...acc, [type]: [{ file, content }] };
 			} else {
