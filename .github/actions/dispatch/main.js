@@ -67,6 +67,12 @@ async function run() {
 
 		const octokit = github.getOctokit(token);
 
+		console.log({
+			type: release_type,
+			repo: repo.repo,
+			base,
+		});
+
 		const x = await octokit.actions.createWorkflowDispatch({
 			owner: "pngwn",
 			repo: "docs-test-shell",
