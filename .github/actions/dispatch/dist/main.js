@@ -6012,7 +6012,9 @@ function get_file_with_name(base, type) {
 function read_file_with_meta(base, type, path_name) {
 	return new Promise(async (rs, rj) => {
 		fs_1.promises.readFile(path__default['default'].join(base, type, path_name))
-			.then((content) => rs({ type, path: path_name, content }))
+			.then((content) =>
+				rs({ type, file: path_name, content: content.toString() })
+			)
 			.catch(rj);
 	});
 }
@@ -6050,6 +6052,16 @@ async function run() {
 		);
 
 		console.log(files);
+
+		const payload = files.reduce((acc, { type, content, file }) => {
+			if (!acc[type]) {
+				return { ...acc, [type]: [{ file, content }] };
+			} else {
+				return { ...acc, [type]: [...acc[type], { file, content }] };
+			}
+		}, {});
+
+		console.log(payload);
 
 		console.log(p);
 	} catch (e) {
