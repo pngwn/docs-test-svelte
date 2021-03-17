@@ -25,7 +25,7 @@ async function run() {
 	const token = core.getInput("token");
 
 	const {
-		context: { eventName, payload, ref },
+		context: { eventName, payload, ref, repo },
 	} = github;
 
 	const release_type =
@@ -74,7 +74,8 @@ async function run() {
 			ref,
 			inputs: {
 				type: release_type,
-				docs: JSON.stringify(webhook_payload),
+				repo,
+				base,
 			},
 		});
 		console.log(x);
