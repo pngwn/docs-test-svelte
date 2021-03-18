@@ -85,24 +85,24 @@ async function run() {
 	let webhook_payload;
 
 	try {
-		// 	const dirs = await fs.readdir(base);
-		// 	console.log("contents of base dir");
-		// 	const file_paths = await await Promise.all(
-		// 		dirs.map((f) => get_file_with_name(base, f))
-		// 	);
+		const dirs = await fs.readdir(base);
+		console.log("contents of base dir");
+		const file_paths = await await Promise.all(
+			dirs.map((f) => get_file_with_name(base, f))
+		);
 
-		// 	const files = await Promise.all(
-		// 		file_paths
-		// 			.filter(({ type }) => type !== "examples" && type !== "tutorials")
-		// 			.reduce(
-		// 				(acc, { type, files }) => [
-		// 					...acc,
-		// 					...files.map((f) => ({ type, file: f })),
-		// 				],
-		// 				[]
-		// 			)
-		// 			.map(({ type, file }) => read_file_with_meta(base, type, file))
-		// 	);
+		const files = await Promise.all(
+			file_paths
+				.filter(({ type }) => type !== "examples" && type !== "tutorials")
+				.reduce(
+					(acc, { type, files }) => [
+						...acc,
+						...files.map((f) => ({ type, file: f })),
+					],
+					[]
+				)
+				.map(({ type, file }) => read_file_with_meta(base, type, file))
+		);
 
 		// TODO: can i send a list of file?
 

@@ -9899,6 +9899,24 @@ Object.defineProperty(Prism.languages.svelte.tag, 'addInlined', {
 Prism.languages.svelte.tag.addInlined('style', 'css');
 Prism.languages.svelte.tag.addInlined('script', 'javascript');
 
+function get_file_with_name(base, type) {
+	return new Promise(async (rs, rj) => {
+		fs_1.promises.readdir(path__default['default'].join(base, type))
+			.then((files) => rs({ type, files }))
+			.catch(rj);
+	});
+}
+
+function read_file_with_meta(base, type, path_name) {
+	return new Promise(async (rs, rj) => {
+		fs_1.promises.readFile(path__default['default'].join(base, type, path_name))
+			.then((content) =>
+				rs({ type, file: path_name, content: content.toString() })
+			)
+			.catch(rj);
+	});
+}
+
 // function zipDirectory(source, out) {
 // 	const archive = archiver("zip", { zlib: { level: 9 } });
 // 	const stream = fs.createWriteStream(out);
@@ -9961,24 +9979,24 @@ async function run() {
 	let webhook_payload;
 
 	try {
-		// 	const dirs = await fs.readdir(base);
-		// 	console.log("contents of base dir");
-		// 	const file_paths = await await Promise.all(
-		// 		dirs.map((f) => get_file_with_name(base, f))
-		// 	);
+		const dirs = await fs_1.promises.readdir(base);
+		console.log("contents of base dir");
+		const file_paths = await await Promise.all(
+			dirs.map((f) => get_file_with_name(base, f))
+		);
 
-		// 	const files = await Promise.all(
-		// 		file_paths
-		// 			.filter(({ type }) => type !== "examples" && type !== "tutorials")
-		// 			.reduce(
-		// 				(acc, { type, files }) => [
-		// 					...acc,
-		// 					...files.map((f) => ({ type, file: f })),
-		// 				],
-		// 				[]
-		// 			)
-		// 			.map(({ type, file }) => read_file_with_meta(base, type, file))
-		// 	);
+		const files = await Promise.all(
+			file_paths
+				.filter(({ type }) => type !== "examples" && type !== "tutorials")
+				.reduce(
+					(acc, { type, files }) => [
+						...acc,
+						...files.map((f) => ({ type, file: f })),
+					],
+					[]
+				)
+				.map(({ type, file }) => read_file_with_meta(base, type, file))
+		);
 
 		// TODO: can i send a list of file?
 
