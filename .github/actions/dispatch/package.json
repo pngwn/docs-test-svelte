@@ -18,6 +18,8 @@
 	"dependencies": {
 		"@actions/core": "^1.2.6",
 		"@actions/exec": "^1.0.4",
-		"@octokit/types": "^6.12.2"
+		"@aws-sdk/client-s3": "^3.8.1",
+		"@octokit/types": "^6.12.2",
+		"@pngwn/svelte-util-parse-docs": "^0.0.1"
 	}
 }
