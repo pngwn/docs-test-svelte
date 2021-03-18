@@ -1246,7 +1246,7 @@ function removeUndefinedProperties(obj) {
     return obj;
 }
 
-function merge(defaults, route, options) {
+function merge$3(defaults, route, options) {
     if (typeof route === "string") {
         let [method, url] = route.split(" ");
         options = Object.assign(url ? { method, url } : { url: method }, options);
@@ -1474,7 +1474,7 @@ function expand(template, context) {
     });
 }
 
-function parse(options) {
+function parse$1(options) {
     // https://fetch.spec.whatwg.org/#methods
     let method = options.method.toUpperCase();
     // replace :varname with {varname} to make it RFC 6570 compatible
@@ -1553,17 +1553,17 @@ function parse(options) {
 }
 
 function endpointWithDefaults(defaults, route, options) {
-    return parse(merge(defaults, route, options));
+    return parse$1(merge$3(defaults, route, options));
 }
 
 function withDefaults$2(oldDefaults, newDefaults) {
-    const DEFAULTS = merge(oldDefaults, newDefaults);
+    const DEFAULTS = merge$3(oldDefaults, newDefaults);
     const endpoint = endpointWithDefaults.bind(null, DEFAULTS);
     return Object.assign(endpoint, {
         DEFAULTS,
         defaults: withDefaults$2.bind(null, DEFAULTS),
-        merge: merge.bind(null, DEFAULTS),
-        parse,
+        merge: merge$3.bind(null, DEFAULTS),
+        parse: parse$1,
     });
 }
 
@@ -7122,7 +7122,7 @@ function createCommonjsModule(fn) {
 	return fn(module, module.exports), module.exports;
 }
 
-createCommonjsModule(function (module) {
+var defaults$5 = createCommonjsModule(function (module) {
 function getDefaults() {
   return {
     baseUrl: null,
@@ -7416,6 +7416,736 @@ var helpers = {
   findClosingBracket: findClosingBracket$1,
   checkSanitizeDeprecation: checkSanitizeDeprecation$1,
   repeatString: repeatString$1
+};
+
+const { defaults: defaults$4 } = defaults$5;
+const {
+  rtrim,
+  splitCells,
+  escape: escape$2,
+  findClosingBracket
+} = helpers;
+
+function outputLink(cap, link, raw) {
+  const href = link.href;
+  const title = link.title ? escape$2(link.title) : null;
+  const text = cap[1].replace(/\\([\[\]])/g, '$1');
+
+  if (cap[0].charAt(0) !== '!') {
+    return {
+      type: 'link',
+      raw,
+      href,
+      title,
+      text
+    };
+  } else {
+    return {
+      type: 'image',
+      raw,
+      href,
+      title,
+      text: escape$2(text)
+    };
+  }
+}
+
+function indentCodeCompensation(raw, text) {
+  const matchIndentToCode = raw.match(/^(\s+)(?:```)/);
+
+  if (matchIndentToCode === null) {
+    return text;
+  }
+
+  const indentToCode = matchIndentToCode[1];
+
+  return text
+    .split('\n')
+    .map(node => {
+      const matchIndentInNode = node.match(/^\s+/);
+      if (matchIndentInNode === null) {
+        return node;
+      }
+
+      const [indentInNode] = matchIndentInNode;
+
+      if (indentInNode.length >= indentToCode.length) {
+        return node.slice(indentToCode.length);
+      }
+
+      return node;
+    })
+    .join('\n');
+}
+
+/**
+ * Tokenizer
+ */
+var Tokenizer_1 = class Tokenizer {
+  constructor(options) {
+    this.options = options || defaults$4;
+  }
+
+  space(src) {
+    const cap = this.rules.block.newline.exec(src);
+    if (cap) {
+      if (cap[0].length > 1) {
+        return {
+          type: 'space',
+          raw: cap[0]
+        };
+      }
+      return { raw: '\n' };
+    }
+  }
+
+  code(src) {
+    const cap = this.rules.block.code.exec(src);
+    if (cap) {
+      const text = cap[0].replace(/^ {1,4}/gm, '');
+      return {
+        type: 'code',
+        raw: cap[0],
+        codeBlockStyle: 'indented',
+        text: !this.options.pedantic
+          ? rtrim(text, '\n')
+          : text
+      };
+    }
+  }
+
+  fences(src) {
+    const cap = this.rules.block.fences.exec(src);
+    if (cap) {
+      const raw = cap[0];
+      const text = indentCodeCompensation(raw, cap[3] || '');
+
+      return {
+        type: 'code',
+        raw,
+        lang: cap[2] ? cap[2].trim() : cap[2],
+        text
+      };
+    }
+  }
+
+  heading(src) {
+    const cap = this.rules.block.heading.exec(src);
+    if (cap) {
+      let text = cap[2].trim();
+
+      // remove trailing #s
+      if (/#$/.test(text)) {
+        const trimmed = rtrim(text, '#');
+        if (this.options.pedantic) {
+          text = trimmed.trim();
+        } else if (!trimmed || / $/.test(trimmed)) {
+          // CommonMark requires space before trailing #s
+          text = trimmed.trim();
+        }
+      }
+
+      return {
+        type: 'heading',
+        raw: cap[0],
+        depth: cap[1].length,
+        text: text
+      };
+    }
+  }
+
+  nptable(src) {
+    const cap = this.rules.block.nptable.exec(src);
+    if (cap) {
+      const item = {
+        type: 'table',
+        header: splitCells(cap[1].replace(/^ *| *\| *$/g, '')),
+        align: cap[2].replace(/^ *|\| *$/g, '').split(/ *\| */),
+        cells: cap[3] ? cap[3].replace(/\n$/, '').split('\n') : [],
+        raw: cap[0]
+      };
+
+      if (item.header.length === item.align.length) {
+        let l = item.align.length;
+        let i;
+        for (i = 0; i < l; i++) {
+          if (/^ *-+: *$/.test(item.align[i])) {
+            item.align[i] = 'right';
+          } else if (/^ *:-+: *$/.test(item.align[i])) {
+            item.align[i] = 'center';
+          } else if (/^ *:-+ *$/.test(item.align[i])) {
+            item.align[i] = 'left';
+          } else {
+            item.align[i] = null;
+          }
+        }
+
+        l = item.cells.length;
+        for (i = 0; i < l; i++) {
+          item.cells[i] = splitCells(item.cells[i], item.header.length);
+        }
+
+        return item;
+      }
+    }
+  }
+
+  hr(src) {
+    const cap = this.rules.block.hr.exec(src);
+    if (cap) {
+      return {
+        type: 'hr',
+        raw: cap[0]
+      };
+    }
+  }
+
+  blockquote(src) {
+    const cap = this.rules.block.blockquote.exec(src);
+    if (cap) {
+      const text = cap[0].replace(/^ *> ?/gm, '');
+
+      return {
+        type: 'blockquote',
+        raw: cap[0],
+        text
+      };
+    }
+  }
+
+  list(src) {
+    const cap = this.rules.block.list.exec(src);
+    if (cap) {
+      let raw = cap[0];
+      const bull = cap[2];
+      const isordered = bull.length > 1;
+
+      const list = {
+        type: 'list',
+        raw,
+        ordered: isordered,
+        start: isordered ? +bull.slice(0, -1) : '',
+        loose: false,
+        items: []
+      };
+
+      // Get each top-level item.
+      const itemMatch = cap[0].match(this.rules.block.item);
+
+      let next = false,
+        item,
+        space,
+        bcurr,
+        bnext,
+        addBack,
+        loose,
+        istask,
+        ischecked,
+        endMatch;
+
+      let l = itemMatch.length;
+      bcurr = this.rules.block.listItemStart.exec(itemMatch[0]);
+      for (let i = 0; i < l; i++) {
+        item = itemMatch[i];
+        raw = item;
+
+        if (!this.options.pedantic) {
+          // Determine if current item contains the end of the list
+          endMatch = item.match(new RegExp('\\n\\s*\\n {0,' + (bcurr[0].length - 1) + '}\\S'));
+          if (endMatch) {
+            addBack = item.length - endMatch.index + itemMatch.slice(i + 1).join('\n').length;
+            list.raw = list.raw.substring(0, list.raw.length - addBack);
+
+            item = item.substring(0, endMatch.index);
+            raw = item;
+            l = i + 1;
+          }
+        }
+
+        // Determine whether the next list item belongs here.
+        // Backpedal if it does not belong in this list.
+        if (i !== l - 1) {
+          bnext = this.rules.block.listItemStart.exec(itemMatch[i + 1]);
+          if (
+            !this.options.pedantic
+              ? bnext[1].length >= bcurr[0].length || bnext[1].length > 3
+              : bnext[1].length > bcurr[1].length
+          ) {
+            // nested list or continuation
+            itemMatch.splice(i, 2, itemMatch[i] + (!this.options.pedantic && bnext[1].length < bcurr[0].length && !itemMatch[i].match(/\n$/) ? '' : '\n') + itemMatch[i + 1]);
+            i--;
+            l--;
+            continue;
+          } else if (
+            // different bullet style
+            !this.options.pedantic || this.options.smartLists
+              ? bnext[2][bnext[2].length - 1] !== bull[bull.length - 1]
+              : isordered === (bnext[2].length === 1)
+          ) {
+            addBack = itemMatch.slice(i + 1).join('\n').length;
+            list.raw = list.raw.substring(0, list.raw.length - addBack);
+            i = l - 1;
+          }
+          bcurr = bnext;
+        }
+
+        // Remove the list item's bullet
+        // so it is seen as the next token.
+        space = item.length;
+        item = item.replace(/^ *([*+-]|\d+[.)]) ?/, '');
+
+        // Outdent whatever the
+        // list item contains. Hacky.
+        if (~item.indexOf('\n ')) {
+          space -= item.length;
+          item = !this.options.pedantic
+            ? item.replace(new RegExp('^ {1,' + space + '}', 'gm'), '')
+            : item.replace(/^ {1,4}/gm, '');
+        }
+
+        // trim item newlines at end
+        item = rtrim(item, '\n');
+        if (i !== l - 1) {
+          raw = raw + '\n';
+        }
+
+        // Determine whether item is loose or not.
+        // Use: /(^|\n)(?! )[^\n]+\n\n(?!\s*$)/
+        // for discount behavior.
+        loose = next || /\n\n(?!\s*$)/.test(raw);
+        if (i !== l - 1) {
+          next = raw.slice(-2) === '\n\n';
+          if (!loose) loose = next;
+        }
+
+        if (loose) {
+          list.loose = true;
+        }
+
+        // Check for task list items
+        if (this.options.gfm) {
+          istask = /^\[[ xX]\] /.test(item);
+          ischecked = undefined;
+          if (istask) {
+            ischecked = item[1] !== ' ';
+            item = item.replace(/^\[[ xX]\] +/, '');
+          }
+        }
+
+        list.items.push({
+          type: 'list_item',
+          raw,
+          task: istask,
+          checked: ischecked,
+          loose: loose,
+          text: item
+        });
+      }
+
+      return list;
+    }
+  }
+
+  html(src) {
+    const cap = this.rules.block.html.exec(src);
+    if (cap) {
+      return {
+        type: this.options.sanitize
+          ? 'paragraph'
+          : 'html',
+        raw: cap[0],
+        pre: !this.options.sanitizer
+          && (cap[1] === 'pre' || cap[1] === 'script' || cap[1] === 'style'),
+        text: this.options.sanitize ? (this.options.sanitizer ? this.options.sanitizer(cap[0]) : escape$2(cap[0])) : cap[0]
+      };
+    }
+  }
+
+  def(src) {
+    const cap = this.rules.block.def.exec(src);
+    if (cap) {
+      if (cap[3]) cap[3] = cap[3].substring(1, cap[3].length - 1);
+      const tag = cap[1].toLowerCase().replace(/\s+/g, ' ');
+      return {
+        tag,
+        raw: cap[0],
+        href: cap[2],
+        title: cap[3]
+      };
+    }
+  }
+
+  table(src) {
+    const cap = this.rules.block.table.exec(src);
+    if (cap) {
+      const item = {
+        type: 'table',
+        header: splitCells(cap[1].replace(/^ *| *\| *$/g, '')),
+        align: cap[2].replace(/^ *|\| *$/g, '').split(/ *\| */),
+        cells: cap[3] ? cap[3].replace(/\n$/, '').split('\n') : []
+      };
+
+      if (item.header.length === item.align.length) {
+        item.raw = cap[0];
+
+        let l = item.align.length;
+        let i;
+        for (i = 0; i < l; i++) {
+          if (/^ *-+: *$/.test(item.align[i])) {
+            item.align[i] = 'right';
+          } else if (/^ *:-+: *$/.test(item.align[i])) {
+            item.align[i] = 'center';
+          } else if (/^ *:-+ *$/.test(item.align[i])) {
+            item.align[i] = 'left';
+          } else {
+            item.align[i] = null;
+          }
+        }
+
+        l = item.cells.length;
+        for (i = 0; i < l; i++) {
+          item.cells[i] = splitCells(
+            item.cells[i].replace(/^ *\| *| *\| *$/g, ''),
+            item.header.length);
+        }
+
+        return item;
+      }
+    }
+  }
+
+  lheading(src) {
+    const cap = this.rules.block.lheading.exec(src);
+    if (cap) {
+      return {
+        type: 'heading',
+        raw: cap[0],
+        depth: cap[2].charAt(0) === '=' ? 1 : 2,
+        text: cap[1]
+      };
+    }
+  }
+
+  paragraph(src) {
+    const cap = this.rules.block.paragraph.exec(src);
+    if (cap) {
+      return {
+        type: 'paragraph',
+        raw: cap[0],
+        text: cap[1].charAt(cap[1].length - 1) === '\n'
+          ? cap[1].slice(0, -1)
+          : cap[1]
+      };
+    }
+  }
+
+  text(src) {
+    const cap = this.rules.block.text.exec(src);
+    if (cap) {
+      return {
+        type: 'text',
+        raw: cap[0],
+        text: cap[0]
+      };
+    }
+  }
+
+  escape(src) {
+    const cap = this.rules.inline.escape.exec(src);
+    if (cap) {
+      return {
+        type: 'escape',
+        raw: cap[0],
+        text: escape$2(cap[1])
+      };
+    }
+  }
+
+  tag(src, inLink, inRawBlock) {
+    const cap = this.rules.inline.tag.exec(src);
+    if (cap) {
+      if (!inLink && /^<a /i.test(cap[0])) {
+        inLink = true;
+      } else if (inLink && /^<\/a>/i.test(cap[0])) {
+        inLink = false;
+      }
+      if (!inRawBlock && /^<(pre|code|kbd|script)(\s|>)/i.test(cap[0])) {
+        inRawBlock = true;
+      } else if (inRawBlock && /^<\/(pre|code|kbd|script)(\s|>)/i.test(cap[0])) {
+        inRawBlock = false;
+      }
+
+      return {
+        type: this.options.sanitize
+          ? 'text'
+          : 'html',
+        raw: cap[0],
+        inLink,
+        inRawBlock,
+        text: this.options.sanitize
+          ? (this.options.sanitizer
+            ? this.options.sanitizer(cap[0])
+            : escape$2(cap[0]))
+          : cap[0]
+      };
+    }
+  }
+
+  link(src) {
+    const cap = this.rules.inline.link.exec(src);
+    if (cap) {
+      const trimmedUrl = cap[2].trim();
+      if (!this.options.pedantic && /^</.test(trimmedUrl)) {
+        // commonmark requires matching angle brackets
+        if (!(/>$/.test(trimmedUrl))) {
+          return;
+        }
+
+        // ending angle bracket cannot be escaped
+        const rtrimSlash = rtrim(trimmedUrl.slice(0, -1), '\\');
+        if ((trimmedUrl.length - rtrimSlash.length) % 2 === 0) {
+          return;
+        }
+      } else {
+        // find closing parenthesis
+        const lastParenIndex = findClosingBracket(cap[2], '()');
+        if (lastParenIndex > -1) {
+          const start = cap[0].indexOf('!') === 0 ? 5 : 4;
+          const linkLen = start + cap[1].length + lastParenIndex;
+          cap[2] = cap[2].substring(0, lastParenIndex);
+          cap[0] = cap[0].substring(0, linkLen).trim();
+          cap[3] = '';
+        }
+      }
+      let href = cap[2];
+      let title = '';
+      if (this.options.pedantic) {
+        // split pedantic href and title
+        const link = /^([^'"]*[^\s])\s+(['"])(.*)\2/.exec(href);
+
+        if (link) {
+          href = link[1];
+          title = link[3];
+        }
+      } else {
+        title = cap[3] ? cap[3].slice(1, -1) : '';
+      }
+
+      href = href.trim();
+      if (/^</.test(href)) {
+        if (this.options.pedantic && !(/>$/.test(trimmedUrl))) {
+          // pedantic allows starting angle bracket without ending angle bracket
+          href = href.slice(1);
+        } else {
+          href = href.slice(1, -1);
+        }
+      }
+      return outputLink(cap, {
+        href: href ? href.replace(this.rules.inline._escapes, '$1') : href,
+        title: title ? title.replace(this.rules.inline._escapes, '$1') : title
+      }, cap[0]);
+    }
+  }
+
+  reflink(src, links) {
+    let cap;
+    if ((cap = this.rules.inline.reflink.exec(src))
+        || (cap = this.rules.inline.nolink.exec(src))) {
+      let link = (cap[2] || cap[1]).replace(/\s+/g, ' ');
+      link = links[link.toLowerCase()];
+      if (!link || !link.href) {
+        const text = cap[0].charAt(0);
+        return {
+          type: 'text',
+          raw: text,
+          text
+        };
+      }
+      return outputLink(cap, link, cap[0]);
+    }
+  }
+
+  emStrong(src, maskedSrc, prevChar = '') {
+    let match = this.rules.inline.emStrong.lDelim.exec(src);
+    if (!match) return;
+
+    if (match[3] && prevChar.match(/[\p{L}\p{N}]/u)) return; // _ can't be between two alphanumerics. \p{L}\p{N} includes non-english alphabet/numbers as well
+
+    const nextChar = match[1] || match[2] || '';
+
+    if (!nextChar || (nextChar && (prevChar === '' || this.rules.inline.punctuation.exec(prevChar)))) {
+      const lLength = match[0].length - 1;
+      let rDelim, rLength, delimTotal = lLength, midDelimTotal = 0;
+
+      const endReg = match[0][0] === '*' ? this.rules.inline.emStrong.rDelimAst : this.rules.inline.emStrong.rDelimUnd;
+      endReg.lastIndex = 0;
+
+      maskedSrc = maskedSrc.slice(-1 * src.length + lLength); // Bump maskedSrc to same section of string as src (move to lexer?)
+
+      while ((match = endReg.exec(maskedSrc)) != null) {
+        rDelim = match[1] || match[2] || match[3] || match[4] || match[5] || match[6];
+
+        if (!rDelim) continue; // matched the first alternative in rules.js (skip the * in __abc*abc__)
+
+        rLength = rDelim.length;
+
+        if (match[3] || match[4]) { // found another Left Delim
+          delimTotal += rLength;
+          continue;
+        } else if (match[5] || match[6]) { // either Left or Right Delim
+          if (lLength % 3 && !((lLength + rLength) % 3)) {
+            midDelimTotal += rLength;
+            continue; // CommonMark Emphasis Rules 9-10
+          }
+        }
+
+        delimTotal -= rLength;
+
+        if (delimTotal > 0) continue; // Haven't found enough closing delimiters
+
+        // If this is the last rDelimiter, remove extra characters. *a*** -> *a*
+        if (delimTotal + midDelimTotal - rLength <= 0 && !maskedSrc.slice(endReg.lastIndex).match(endReg)) {
+          rLength = Math.min(rLength, rLength + delimTotal + midDelimTotal);
+        }
+
+        if (Math.min(lLength, rLength) % 2) {
+          return {
+            type: 'em',
+            raw: src.slice(0, lLength + match.index + rLength + 1),
+            text: src.slice(1, lLength + match.index + rLength)
+          };
+        }
+        if (Math.min(lLength, rLength) % 2 === 0) {
+          return {
+            type: 'strong',
+            raw: src.slice(0, lLength + match.index + rLength + 1),
+            text: src.slice(2, lLength + match.index + rLength - 1)
+          };
+        }
+      }
+    }
+  }
+
+  codespan(src) {
+    const cap = this.rules.inline.code.exec(src);
+    if (cap) {
+      let text = cap[2].replace(/\n/g, ' ');
+      const hasNonSpaceChars = /[^ ]/.test(text);
+      const hasSpaceCharsOnBothEnds = /^ /.test(text) && / $/.test(text);
+      if (hasNonSpaceChars && hasSpaceCharsOnBothEnds) {
+        text = text.substring(1, text.length - 1);
+      }
+      text = escape$2(text, true);
+      return {
+        type: 'codespan',
+        raw: cap[0],
+        text
+      };
+    }
+  }
+
+  br(src) {
+    const cap = this.rules.inline.br.exec(src);
+    if (cap) {
+      return {
+        type: 'br',
+        raw: cap[0]
+      };
+    }
+  }
+
+  del(src) {
+    const cap = this.rules.inline.del.exec(src);
+    if (cap) {
+      return {
+        type: 'del',
+        raw: cap[0],
+        text: cap[2]
+      };
+    }
+  }
+
+  autolink(src, mangle) {
+    const cap = this.rules.inline.autolink.exec(src);
+    if (cap) {
+      let text, href;
+      if (cap[2] === '@') {
+        text = escape$2(this.options.mangle ? mangle(cap[1]) : cap[1]);
+        href = 'mailto:' + text;
+      } else {
+        text = escape$2(cap[1]);
+        href = text;
+      }
+
+      return {
+        type: 'link',
+        raw: cap[0],
+        text,
+        href,
+        tokens: [
+          {
+            type: 'text',
+            raw: text,
+            text
+          }
+        ]
+      };
+    }
+  }
+
+  url(src, mangle) {
+    let cap;
+    if (cap = this.rules.inline.url.exec(src)) {
+      let text, href;
+      if (cap[2] === '@') {
+        text = escape$2(this.options.mangle ? mangle(cap[0]) : cap[0]);
+        href = 'mailto:' + text;
+      } else {
+        // do extended autolink path validation
+        let prevCapZero;
+        do {
+          prevCapZero = cap[0];
+          cap[0] = this.rules.inline._backpedal.exec(cap[0])[0];
+        } while (prevCapZero !== cap[0]);
+        text = escape$2(cap[0]);
+        if (cap[1] === 'www.') {
+          href = 'http://' + text;
+        } else {
+          href = text;
+        }
+      }
+      return {
+        type: 'link',
+        raw: cap[0],
+        text,
+        href,
+        tokens: [
+          {
+            type: 'text',
+            raw: text,
+            text
+          }
+        ]
+      };
+    }
+  }
+
+  inlineText(src, inRawBlock, smartypants) {
+    const cap = this.rules.inline.text.exec(src);
+    if (cap) {
+      let text;
+      if (inRawBlock) {
+        text = this.options.sanitize ? (this.options.sanitizer ? this.options.sanitizer(cap[0]) : escape$2(cap[0])) : cap[0];
+      } else {
+        text = escape$2(this.options.smartypants ? smartypants(cap[0]) : cap[0]);
+      }
+      return {
+        type: 'text',
+        raw: cap[0],
+        text
+      };
+    }
+  }
 };
 
 const {
@@ -7724,12 +8454,1345 @@ inline$1.breaks = merge$1({}, inline$1.gfm, {
     .getRegex()
 });
 
+var rules = {
+  block: block$1,
+  inline: inline$1
+};
+
+const { defaults: defaults$3 } = defaults$5;
+const { block, inline } = rules;
+const { repeatString } = helpers;
+
+/**
+ * smartypants text replacement
+ */
+function smartypants(text) {
+  return text
+    // em-dashes
+    .replace(/---/g, '\u2014')
+    // en-dashes
+    .replace(/--/g, '\u2013')
+    // opening singles
+    .replace(/(^|[-\u2014/(\[{"\s])'/g, '$1\u2018')
+    // closing singles & apostrophes
+    .replace(/'/g, '\u2019')
+    // opening doubles
+    .replace(/(^|[-\u2014/(\[{\u2018\s])"/g, '$1\u201c')
+    // closing doubles
+    .replace(/"/g, '\u201d')
+    // ellipses
+    .replace(/\.{3}/g, '\u2026');
+}
+
+/**
+ * mangle email addresses
+ */
+function mangle(text) {
+  let out = '',
+    i,
+    ch;
+
+  const l = text.length;
+  for (i = 0; i < l; i++) {
+    ch = text.charCodeAt(i);
+    if (Math.random() > 0.5) {
+      ch = 'x' + ch.toString(16);
+    }
+    out += '&#' + ch + ';';
+  }
+
+  return out;
+}
+
+/**
+ * Block Lexer
+ */
+var Lexer_1 = class Lexer {
+  constructor(options) {
+    this.tokens = [];
+    this.tokens.links = Object.create(null);
+    this.options = options || defaults$3;
+    this.options.tokenizer = this.options.tokenizer || new Tokenizer_1();
+    this.tokenizer = this.options.tokenizer;
+    this.tokenizer.options = this.options;
+
+    const rules = {
+      block: block.normal,
+      inline: inline.normal
+    };
+
+    if (this.options.pedantic) {
+      rules.block = block.pedantic;
+      rules.inline = inline.pedantic;
+    } else if (this.options.gfm) {
+      rules.block = block.gfm;
+      if (this.options.breaks) {
+        rules.inline = inline.breaks;
+      } else {
+        rules.inline = inline.gfm;
+      }
+    }
+    this.tokenizer.rules = rules;
+  }
+
+  /**
+   * Expose Rules
+   */
+  static get rules() {
+    return {
+      block,
+      inline
+    };
+  }
+
+  /**
+   * Static Lex Method
+   */
+  static lex(src, options) {
+    const lexer = new Lexer(options);
+    return lexer.lex(src);
+  }
+
+  /**
+   * Static Lex Inline Method
+   */
+  static lexInline(src, options) {
+    const lexer = new Lexer(options);
+    return lexer.inlineTokens(src);
+  }
+
+  /**
+   * Preprocessing
+   */
+  lex(src) {
+    src = src
+      .replace(/\r\n|\r/g, '\n')
+      .replace(/\t/g, '    ');
+
+    this.blockTokens(src, this.tokens, true);
+
+    this.inline(this.tokens);
+
+    return this.tokens;
+  }
+
+  /**
+   * Lexing
+   */
+  blockTokens(src, tokens = [], top = true) {
+    if (this.options.pedantic) {
+      src = src.replace(/^ +$/gm, '');
+    }
+    let token, i, l, lastToken;
+
+    while (src) {
+      // newline
+      if (token = this.tokenizer.space(src)) {
+        src = src.substring(token.raw.length);
+        if (token.type) {
+          tokens.push(token);
+        }
+        continue;
+      }
+
+      // code
+      if (token = this.tokenizer.code(src)) {
+        src = src.substring(token.raw.length);
+        lastToken = tokens[tokens.length - 1];
+        // An indented code block cannot interrupt a paragraph.
+        if (lastToken && lastToken.type === 'paragraph') {
+          lastToken.raw += '\n' + token.raw;
+          lastToken.text += '\n' + token.text;
+        } else {
+          tokens.push(token);
+        }
+        continue;
+      }
+
+      // fences
+      if (token = this.tokenizer.fences(src)) {
+        src = src.substring(token.raw.length);
+        tokens.push(token);
+        continue;
+      }
+
+      // heading
+      if (token = this.tokenizer.heading(src)) {
+        src = src.substring(token.raw.length);
+        tokens.push(token);
+        continue;
+      }
+
+      // table no leading pipe (gfm)
+      if (token = this.tokenizer.nptable(src)) {
+        src = src.substring(token.raw.length);
+        tokens.push(token);
+        continue;
+      }
+
+      // hr
+      if (token = this.tokenizer.hr(src)) {
+        src = src.substring(token.raw.length);
+        tokens.push(token);
+        continue;
+      }
+
+      // blockquote
+      if (token = this.tokenizer.blockquote(src)) {
+        src = src.substring(token.raw.length);
+        token.tokens = this.blockTokens(token.text, [], top);
+        tokens.push(token);
+        continue;
+      }
+
+      // list
+      if (token = this.tokenizer.list(src)) {
+        src = src.substring(token.raw.length);
+        l = token.items.length;
+        for (i = 0; i < l; i++) {
+          token.items[i].tokens = this.blockTokens(token.items[i].text, [], false);
+        }
+        tokens.push(token);
+        continue;
+      }
+
+      // html
+      if (token = this.tokenizer.html(src)) {
+        src = src.substring(token.raw.length);
+        tokens.push(token);
+        continue;
+      }
+
+      // def
+      if (top && (token = this.tokenizer.def(src))) {
+        src = src.substring(token.raw.length);
+        if (!this.tokens.links[token.tag]) {
+          this.tokens.links[token.tag] = {
+            href: token.href,
+            title: token.title
+          };
+        }
+        continue;
+      }
+
+      // table (gfm)
+      if (token = this.tokenizer.table(src)) {
+        src = src.substring(token.raw.length);
+        tokens.push(token);
+        continue;
+      }
+
+      // lheading
+      if (token = this.tokenizer.lheading(src)) {
+        src = src.substring(token.raw.length);
+        tokens.push(token);
+        continue;
+      }
+
+      // top-level paragraph
+      if (top && (token = this.tokenizer.paragraph(src))) {
+        src = src.substring(token.raw.length);
+        tokens.push(token);
+        continue;
+      }
+
+      // text
+      if (token = this.tokenizer.text(src)) {
+        src = src.substring(token.raw.length);
+        lastToken = tokens[tokens.length - 1];
+        if (lastToken && lastToken.type === 'text') {
+          lastToken.raw += '\n' + token.raw;
+          lastToken.text += '\n' + token.text;
+        } else {
+          tokens.push(token);
+        }
+        continue;
+      }
+
+      if (src) {
+        const errMsg = 'Infinite loop on byte: ' + src.charCodeAt(0);
+        if (this.options.silent) {
+          console.error(errMsg);
+          break;
+        } else {
+          throw new Error(errMsg);
+        }
+      }
+    }
+
+    return tokens;
+  }
+
+  inline(tokens) {
+    let i,
+      j,
+      k,
+      l2,
+      row,
+      token;
+
+    const l = tokens.length;
+    for (i = 0; i < l; i++) {
+      token = tokens[i];
+      switch (token.type) {
+        case 'paragraph':
+        case 'text':
+        case 'heading': {
+          token.tokens = [];
+          this.inlineTokens(token.text, token.tokens);
+          break;
+        }
+        case 'table': {
+          token.tokens = {
+            header: [],
+            cells: []
+          };
+
+          // header
+          l2 = token.header.length;
+          for (j = 0; j < l2; j++) {
+            token.tokens.header[j] = [];
+            this.inlineTokens(token.header[j], token.tokens.header[j]);
+          }
+
+          // cells
+          l2 = token.cells.length;
+          for (j = 0; j < l2; j++) {
+            row = token.cells[j];
+            token.tokens.cells[j] = [];
+            for (k = 0; k < row.length; k++) {
+              token.tokens.cells[j][k] = [];
+              this.inlineTokens(row[k], token.tokens.cells[j][k]);
+            }
+          }
+
+          break;
+        }
+        case 'blockquote': {
+          this.inline(token.tokens);
+          break;
+        }
+        case 'list': {
+          l2 = token.items.length;
+          for (j = 0; j < l2; j++) {
+            this.inline(token.items[j].tokens);
+          }
+          break;
+        }
+      }
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Lexing/Compiling
+   */
+  inlineTokens(src, tokens = [], inLink = false, inRawBlock = false) {
+    let token, lastToken;
+
+    // String with links masked to avoid interference with em and strong
+    let maskedSrc = src;
+    let match;
+    let keepPrevChar, prevChar;
+
+    // Mask out reflinks
+    if (this.tokens.links) {
+      const links = Object.keys(this.tokens.links);
+      if (links.length > 0) {
+        while ((match = this.tokenizer.rules.inline.reflinkSearch.exec(maskedSrc)) != null) {
+          if (links.includes(match[0].slice(match[0].lastIndexOf('[') + 1, -1))) {
+            maskedSrc = maskedSrc.slice(0, match.index) + '[' + repeatString('a', match[0].length - 2) + ']' + maskedSrc.slice(this.tokenizer.rules.inline.reflinkSearch.lastIndex);
+          }
+        }
+      }
+    }
+    // Mask out other blocks
+    while ((match = this.tokenizer.rules.inline.blockSkip.exec(maskedSrc)) != null) {
+      maskedSrc = maskedSrc.slice(0, match.index) + '[' + repeatString('a', match[0].length - 2) + ']' + maskedSrc.slice(this.tokenizer.rules.inline.blockSkip.lastIndex);
+    }
+
+    // Mask out escaped em & strong delimiters
+    while ((match = this.tokenizer.rules.inline.escapedEmSt.exec(maskedSrc)) != null) {
+      maskedSrc = maskedSrc.slice(0, match.index) + '++' + maskedSrc.slice(this.tokenizer.rules.inline.escapedEmSt.lastIndex);
+    }
+
+    while (src) {
+      if (!keepPrevChar) {
+        prevChar = '';
+      }
+      keepPrevChar = false;
+
+      // escape
+      if (token = this.tokenizer.escape(src)) {
+        src = src.substring(token.raw.length);
+        tokens.push(token);
+        continue;
+      }
+
+      // tag
+      if (token = this.tokenizer.tag(src, inLink, inRawBlock)) {
+        src = src.substring(token.raw.length);
+        inLink = token.inLink;
+        inRawBlock = token.inRawBlock;
+        const lastToken = tokens[tokens.length - 1];
+        if (lastToken && token.type === 'text' && lastToken.type === 'text') {
+          lastToken.raw += token.raw;
+          lastToken.text += token.text;
+        } else {
+          tokens.push(token);
+        }
+        continue;
+      }
+
+      // link
+      if (token = this.tokenizer.link(src)) {
+        src = src.substring(token.raw.length);
+        if (token.type === 'link') {
+          token.tokens = this.inlineTokens(token.text, [], true, inRawBlock);
+        }
+        tokens.push(token);
+        continue;
+      }
+
+      // reflink, nolink
+      if (token = this.tokenizer.reflink(src, this.tokens.links)) {
+        src = src.substring(token.raw.length);
+        const lastToken = tokens[tokens.length - 1];
+        if (token.type === 'link') {
+          token.tokens = this.inlineTokens(token.text, [], true, inRawBlock);
+          tokens.push(token);
+        } else if (lastToken && token.type === 'text' && lastToken.type === 'text') {
+          lastToken.raw += token.raw;
+          lastToken.text += token.text;
+        } else {
+          tokens.push(token);
+        }
+        continue;
+      }
+
+      // em & strong
+      if (token = this.tokenizer.emStrong(src, maskedSrc, prevChar)) {
+        src = src.substring(token.raw.length);
+        token.tokens = this.inlineTokens(token.text, [], inLink, inRawBlock);
+        tokens.push(token);
+        continue;
+      }
+
+      // code
+      if (token = this.tokenizer.codespan(src)) {
+        src = src.substring(token.raw.length);
+        tokens.push(token);
+        continue;
+      }
+
+      // br
+      if (token = this.tokenizer.br(src)) {
+        src = src.substring(token.raw.length);
+        tokens.push(token);
+        continue;
+      }
+
+      // del (gfm)
+      if (token = this.tokenizer.del(src)) {
+        src = src.substring(token.raw.length);
+        token.tokens = this.inlineTokens(token.text, [], inLink, inRawBlock);
+        tokens.push(token);
+        continue;
+      }
+
+      // autolink
+      if (token = this.tokenizer.autolink(src, mangle)) {
+        src = src.substring(token.raw.length);
+        tokens.push(token);
+        continue;
+      }
+
+      // url (gfm)
+      if (!inLink && (token = this.tokenizer.url(src, mangle))) {
+        src = src.substring(token.raw.length);
+        tokens.push(token);
+        continue;
+      }
+
+      // text
+      if (token = this.tokenizer.inlineText(src, inRawBlock, smartypants)) {
+        src = src.substring(token.raw.length);
+        if (token.raw.slice(-1) !== '_') { // Track prevChar before string of ____ started
+          prevChar = token.raw.slice(-1);
+        }
+        keepPrevChar = true;
+        lastToken = tokens[tokens.length - 1];
+        if (lastToken && lastToken.type === 'text') {
+          lastToken.raw += token.raw;
+          lastToken.text += token.text;
+        } else {
+          tokens.push(token);
+        }
+        continue;
+      }
+
+      if (src) {
+        const errMsg = 'Infinite loop on byte: ' + src.charCodeAt(0);
+        if (this.options.silent) {
+          console.error(errMsg);
+          break;
+        } else {
+          throw new Error(errMsg);
+        }
+      }
+    }
+
+    return tokens;
+  }
+};
+
+const { defaults: defaults$2 } = defaults$5;
+const {
+  cleanUrl,
+  escape: escape$1
+} = helpers;
+
+/**
+ * Renderer
+ */
+var Renderer_1 = class Renderer {
+  constructor(options) {
+    this.options = options || defaults$2;
+  }
+
+  code(code, infostring, escaped) {
+    const lang = (infostring || '').match(/\S*/)[0];
+    if (this.options.highlight) {
+      const out = this.options.highlight(code, lang);
+      if (out != null && out !== code) {
+        escaped = true;
+        code = out;
+      }
+    }
+
+    code = code.replace(/\n$/, '') + '\n';
+
+    if (!lang) {
+      return '<pre><code>'
+        + (escaped ? code : escape$1(code, true))
+        + '</code></pre>\n';
+    }
+
+    return '<pre><code class="'
+      + this.options.langPrefix
+      + escape$1(lang, true)
+      + '">'
+      + (escaped ? code : escape$1(code, true))
+      + '</code></pre>\n';
+  }
+
+  blockquote(quote) {
+    return '<blockquote>\n' + quote + '</blockquote>\n';
+  }
+
+  html(html) {
+    return html;
+  }
+
+  heading(text, level, raw, slugger) {
+    if (this.options.headerIds) {
+      return '<h'
+        + level
+        + ' id="'
+        + this.options.headerPrefix
+        + slugger.slug(raw)
+        + '">'
+        + text
+        + '</h'
+        + level
+        + '>\n';
+    }
+    // ignore IDs
+    return '<h' + level + '>' + text + '</h' + level + '>\n';
+  }
+
+  hr() {
+    return this.options.xhtml ? '<hr/>\n' : '<hr>\n';
+  }
+
+  list(body, ordered, start) {
+    const type = ordered ? 'ol' : 'ul',
+      startatt = (ordered && start !== 1) ? (' start="' + start + '"') : '';
+    return '<' + type + startatt + '>\n' + body + '</' + type + '>\n';
+  }
+
+  listitem(text) {
+    return '<li>' + text + '</li>\n';
+  }
+
+  checkbox(checked) {
+    return '<input '
+      + (checked ? 'checked="" ' : '')
+      + 'disabled="" type="checkbox"'
+      + (this.options.xhtml ? ' /' : '')
+      + '> ';
+  }
+
+  paragraph(text) {
+    return '<p>' + text + '</p>\n';
+  }
+
+  table(header, body) {
+    if (body) body = '<tbody>' + body + '</tbody>';
+
+    return '<table>\n'
+      + '<thead>\n'
+      + header
+      + '</thead>\n'
+      + body
+      + '</table>\n';
+  }
+
+  tablerow(content) {
+    return '<tr>\n' + content + '</tr>\n';
+  }
+
+  tablecell(content, flags) {
+    const type = flags.header ? 'th' : 'td';
+    const tag = flags.align
+      ? '<' + type + ' align="' + flags.align + '">'
+      : '<' + type + '>';
+    return tag + content + '</' + type + '>\n';
+  }
+
+  // span level renderer
+  strong(text) {
+    return '<strong>' + text + '</strong>';
+  }
+
+  em(text) {
+    return '<em>' + text + '</em>';
+  }
+
+  codespan(text) {
+    return '<code>' + text + '</code>';
+  }
+
+  br() {
+    return this.options.xhtml ? '<br/>' : '<br>';
+  }
+
+  del(text) {
+    return '<del>' + text + '</del>';
+  }
+
+  link(href, title, text) {
+    href = cleanUrl(this.options.sanitize, this.options.baseUrl, href);
+    if (href === null) {
+      return text;
+    }
+    let out = '<a href="' + escape$1(href) + '"';
+    if (title) {
+      out += ' title="' + title + '"';
+    }
+    out += '>' + text + '</a>';
+    return out;
+  }
+
+  image(href, title, text) {
+    href = cleanUrl(this.options.sanitize, this.options.baseUrl, href);
+    if (href === null) {
+      return text;
+    }
+
+    let out = '<img src="' + href + '" alt="' + text + '"';
+    if (title) {
+      out += ' title="' + title + '"';
+    }
+    out += this.options.xhtml ? '/>' : '>';
+    return out;
+  }
+
+  text(text) {
+    return text;
+  }
+};
+
+/**
+ * TextRenderer
+ * returns only the textual part of the token
+ */
+var TextRenderer_1 = class TextRenderer {
+  // no need for block level renderers
+  strong(text) {
+    return text;
+  }
+
+  em(text) {
+    return text;
+  }
+
+  codespan(text) {
+    return text;
+  }
+
+  del(text) {
+    return text;
+  }
+
+  html(text) {
+    return text;
+  }
+
+  text(text) {
+    return text;
+  }
+
+  link(href, title, text) {
+    return '' + text;
+  }
+
+  image(href, title, text) {
+    return '' + text;
+  }
+
+  br() {
+    return '';
+  }
+};
+
+/**
+ * Slugger generates header id
+ */
+var Slugger_1 = class Slugger {
+  constructor() {
+    this.seen = {};
+  }
+
+  serialize(value) {
+    return value
+      .toLowerCase()
+      .trim()
+      // remove html tags
+      .replace(/<[!\/a-z].*?>/ig, '')
+      // remove unwanted chars
+      .replace(/[\u2000-\u206F\u2E00-\u2E7F\\'!"#$%&()*+,./:;<=>?@[\]^`{|}~]/g, '')
+      .replace(/\s/g, '-');
+  }
+
+  /**
+   * Finds the next safe (unique) slug to use
+   */
+  getNextSafeSlug(originalSlug, isDryRun) {
+    let slug = originalSlug;
+    let occurenceAccumulator = 0;
+    if (this.seen.hasOwnProperty(slug)) {
+      occurenceAccumulator = this.seen[originalSlug];
+      do {
+        occurenceAccumulator++;
+        slug = originalSlug + '-' + occurenceAccumulator;
+      } while (this.seen.hasOwnProperty(slug));
+    }
+    if (!isDryRun) {
+      this.seen[originalSlug] = occurenceAccumulator;
+      this.seen[slug] = 0;
+    }
+    return slug;
+  }
+
+  /**
+   * Convert string to unique id
+   * @param {object} options
+   * @param {boolean} options.dryrun Generates the next unique slug without updating the internal accumulator.
+   */
+  slug(value, options = {}) {
+    const slug = this.serialize(value);
+    return this.getNextSafeSlug(slug, options.dryrun);
+  }
+};
+
+const { defaults: defaults$1 } = defaults$5;
+const {
+  unescape
+} = helpers;
+
+/**
+ * Parsing & Compiling
+ */
+var Parser_1 = class Parser {
+  constructor(options) {
+    this.options = options || defaults$1;
+    this.options.renderer = this.options.renderer || new Renderer_1();
+    this.renderer = this.options.renderer;
+    this.renderer.options = this.options;
+    this.textRenderer = new TextRenderer_1();
+    this.slugger = new Slugger_1();
+  }
+
+  /**
+   * Static Parse Method
+   */
+  static parse(tokens, options) {
+    const parser = new Parser(options);
+    return parser.parse(tokens);
+  }
+
+  /**
+   * Static Parse Inline Method
+   */
+  static parseInline(tokens, options) {
+    const parser = new Parser(options);
+    return parser.parseInline(tokens);
+  }
+
+  /**
+   * Parse Loop
+   */
+  parse(tokens, top = true) {
+    let out = '',
+      i,
+      j,
+      k,
+      l2,
+      l3,
+      row,
+      cell,
+      header,
+      body,
+      token,
+      ordered,
+      start,
+      loose,
+      itemBody,
+      item,
+      checked,
+      task,
+      checkbox;
+
+    const l = tokens.length;
+    for (i = 0; i < l; i++) {
+      token = tokens[i];
+      switch (token.type) {
+        case 'space': {
+          continue;
+        }
+        case 'hr': {
+          out += this.renderer.hr();
+          continue;
+        }
+        case 'heading': {
+          out += this.renderer.heading(
+            this.parseInline(token.tokens),
+            token.depth,
+            unescape(this.parseInline(token.tokens, this.textRenderer)),
+            this.slugger);
+          continue;
+        }
+        case 'code': {
+          out += this.renderer.code(token.text,
+            token.lang,
+            token.escaped);
+          continue;
+        }
+        case 'table': {
+          header = '';
+
+          // header
+          cell = '';
+          l2 = token.header.length;
+          for (j = 0; j < l2; j++) {
+            cell += this.renderer.tablecell(
+              this.parseInline(token.tokens.header[j]),
+              { header: true, align: token.align[j] }
+            );
+          }
+          header += this.renderer.tablerow(cell);
+
+          body = '';
+          l2 = token.cells.length;
+          for (j = 0; j < l2; j++) {
+            row = token.tokens.cells[j];
+
+            cell = '';
+            l3 = row.length;
+            for (k = 0; k < l3; k++) {
+              cell += this.renderer.tablecell(
+                this.parseInline(row[k]),
+                { header: false, align: token.align[k] }
+              );
+            }
+
+            body += this.renderer.tablerow(cell);
+          }
+          out += this.renderer.table(header, body);
+          continue;
+        }
+        case 'blockquote': {
+          body = this.parse(token.tokens);
+          out += this.renderer.blockquote(body);
+          continue;
+        }
+        case 'list': {
+          ordered = token.ordered;
+          start = token.start;
+          loose = token.loose;
+          l2 = token.items.length;
+
+          body = '';
+          for (j = 0; j < l2; j++) {
+            item = token.items[j];
+            checked = item.checked;
+            task = item.task;
+
+            itemBody = '';
+            if (item.task) {
+              checkbox = this.renderer.checkbox(checked);
+              if (loose) {
+                if (item.tokens.length > 0 && item.tokens[0].type === 'text') {
+                  item.tokens[0].text = checkbox + ' ' + item.tokens[0].text;
+                  if (item.tokens[0].tokens && item.tokens[0].tokens.length > 0 && item.tokens[0].tokens[0].type === 'text') {
+                    item.tokens[0].tokens[0].text = checkbox + ' ' + item.tokens[0].tokens[0].text;
+                  }
+                } else {
+                  item.tokens.unshift({
+                    type: 'text',
+                    text: checkbox
+                  });
+                }
+              } else {
+                itemBody += checkbox;
+              }
+            }
+
+            itemBody += this.parse(item.tokens, loose);
+            body += this.renderer.listitem(itemBody, task, checked);
+          }
+
+          out += this.renderer.list(body, ordered, start);
+          continue;
+        }
+        case 'html': {
+          // TODO parse inline content if parameter markdown=1
+          out += this.renderer.html(token.text);
+          continue;
+        }
+        case 'paragraph': {
+          out += this.renderer.paragraph(this.parseInline(token.tokens));
+          continue;
+        }
+        case 'text': {
+          body = token.tokens ? this.parseInline(token.tokens) : token.text;
+          while (i + 1 < l && tokens[i + 1].type === 'text') {
+            token = tokens[++i];
+            body += '\n' + (token.tokens ? this.parseInline(token.tokens) : token.text);
+          }
+          out += top ? this.renderer.paragraph(body) : body;
+          continue;
+        }
+        default: {
+          const errMsg = 'Token with "' + token.type + '" type was not found.';
+          if (this.options.silent) {
+            console.error(errMsg);
+            return;
+          } else {
+            throw new Error(errMsg);
+          }
+        }
+      }
+    }
+
+    return out;
+  }
+
+  /**
+   * Parse Inline Tokens
+   */
+  parseInline(tokens, renderer) {
+    renderer = renderer || this.renderer;
+    let out = '',
+      i,
+      token;
+
+    const l = tokens.length;
+    for (i = 0; i < l; i++) {
+      token = tokens[i];
+      switch (token.type) {
+        case 'escape': {
+          out += renderer.text(token.text);
+          break;
+        }
+        case 'html': {
+          out += renderer.html(token.text);
+          break;
+        }
+        case 'link': {
+          out += renderer.link(token.href, token.title, this.parseInline(token.tokens, renderer));
+          break;
+        }
+        case 'image': {
+          out += renderer.image(token.href, token.title, token.text);
+          break;
+        }
+        case 'strong': {
+          out += renderer.strong(this.parseInline(token.tokens, renderer));
+          break;
+        }
+        case 'em': {
+          out += renderer.em(this.parseInline(token.tokens, renderer));
+          break;
+        }
+        case 'codespan': {
+          out += renderer.codespan(token.text);
+          break;
+        }
+        case 'br': {
+          out += renderer.br();
+          break;
+        }
+        case 'del': {
+          out += renderer.del(this.parseInline(token.tokens, renderer));
+          break;
+        }
+        case 'text': {
+          out += renderer.text(token.text);
+          break;
+        }
+        default: {
+          const errMsg = 'Token with "' + token.type + '" type was not found.';
+          if (this.options.silent) {
+            console.error(errMsg);
+            return;
+          } else {
+            throw new Error(errMsg);
+          }
+        }
+      }
+    }
+    return out;
+  }
+};
+
+const {
+  merge,
+  checkSanitizeDeprecation,
+  escape
+} = helpers;
+const {
+  getDefaults,
+  changeDefaults,
+  defaults
+} = defaults$5;
+
+/**
+ * Marked
+ */
+function marked(src, opt, callback) {
+  // throw error in case of non string input
+  if (typeof src === 'undefined' || src === null) {
+    throw new Error('marked(): input parameter is undefined or null');
+  }
+  if (typeof src !== 'string') {
+    throw new Error('marked(): input parameter is of type '
+      + Object.prototype.toString.call(src) + ', string expected');
+  }
+
+  if (typeof opt === 'function') {
+    callback = opt;
+    opt = null;
+  }
+
+  opt = merge({}, marked.defaults, opt || {});
+  checkSanitizeDeprecation(opt);
+
+  if (callback) {
+    const highlight = opt.highlight;
+    let tokens;
+
+    try {
+      tokens = Lexer_1.lex(src, opt);
+    } catch (e) {
+      return callback(e);
+    }
+
+    const done = function(err) {
+      let out;
+
+      if (!err) {
+        try {
+          out = Parser_1.parse(tokens, opt);
+        } catch (e) {
+          err = e;
+        }
+      }
+
+      opt.highlight = highlight;
+
+      return err
+        ? callback(err)
+        : callback(null, out);
+    };
+
+    if (!highlight || highlight.length < 3) {
+      return done();
+    }
+
+    delete opt.highlight;
+
+    if (!tokens.length) return done();
+
+    let pending = 0;
+    marked.walkTokens(tokens, function(token) {
+      if (token.type === 'code') {
+        pending++;
+        setTimeout(() => {
+          highlight(token.text, token.lang, function(err, code) {
+            if (err) {
+              return done(err);
+            }
+            if (code != null && code !== token.text) {
+              token.text = code;
+              token.escaped = true;
+            }
+
+            pending--;
+            if (pending === 0) {
+              done();
+            }
+          });
+        }, 0);
+      }
+    });
+
+    if (pending === 0) {
+      done();
+    }
+
+    return;
+  }
+
+  try {
+    const tokens = Lexer_1.lex(src, opt);
+    if (opt.walkTokens) {
+      marked.walkTokens(tokens, opt.walkTokens);
+    }
+    return Parser_1.parse(tokens, opt);
+  } catch (e) {
+    e.message += '\nPlease report this to https://github.com/markedjs/marked.';
+    if (opt.silent) {
+      return '<p>An error occurred:</p><pre>'
+        + escape(e.message + '', true)
+        + '</pre>';
+    }
+    throw e;
+  }
+}
+
+/**
+ * Options
+ */
+
+marked.options =
+marked.setOptions = function(opt) {
+  merge(marked.defaults, opt);
+  changeDefaults(marked.defaults);
+  return marked;
+};
+
+marked.getDefaults = getDefaults;
+
+marked.defaults = defaults;
+
+/**
+ * Use Extension
+ */
+
+marked.use = function(extension) {
+  const opts = merge({}, extension);
+  if (extension.renderer) {
+    const renderer = marked.defaults.renderer || new Renderer_1();
+    for (const prop in extension.renderer) {
+      const prevRenderer = renderer[prop];
+      renderer[prop] = (...args) => {
+        let ret = extension.renderer[prop].apply(renderer, args);
+        if (ret === false) {
+          ret = prevRenderer.apply(renderer, args);
+        }
+        return ret;
+      };
+    }
+    opts.renderer = renderer;
+  }
+  if (extension.tokenizer) {
+    const tokenizer = marked.defaults.tokenizer || new Tokenizer_1();
+    for (const prop in extension.tokenizer) {
+      const prevTokenizer = tokenizer[prop];
+      tokenizer[prop] = (...args) => {
+        let ret = extension.tokenizer[prop].apply(tokenizer, args);
+        if (ret === false) {
+          ret = prevTokenizer.apply(tokenizer, args);
+        }
+        return ret;
+      };
+    }
+    opts.tokenizer = tokenizer;
+  }
+  if (extension.walkTokens) {
+    const walkTokens = marked.defaults.walkTokens;
+    opts.walkTokens = (token) => {
+      extension.walkTokens(token);
+      if (walkTokens) {
+        walkTokens(token);
+      }
+    };
+  }
+  marked.setOptions(opts);
+};
+
+/**
+ * Run callback for every token
+ */
+
+marked.walkTokens = function(tokens, callback) {
+  for (const token of tokens) {
+    callback(token);
+    switch (token.type) {
+      case 'table': {
+        for (const cell of token.tokens.header) {
+          marked.walkTokens(cell, callback);
+        }
+        for (const row of token.tokens.cells) {
+          for (const cell of row) {
+            marked.walkTokens(cell, callback);
+          }
+        }
+        break;
+      }
+      case 'list': {
+        marked.walkTokens(token.items, callback);
+        break;
+      }
+      default: {
+        if (token.tokens) {
+          marked.walkTokens(token.tokens, callback);
+        }
+      }
+    }
+  }
+};
+
+/**
+ * Parse Inline
+ */
+marked.parseInline = function(src, opt) {
+  // throw error in case of non string input
+  if (typeof src === 'undefined' || src === null) {
+    throw new Error('marked.parseInline(): input parameter is undefined or null');
+  }
+  if (typeof src !== 'string') {
+    throw new Error('marked.parseInline(): input parameter is of type '
+      + Object.prototype.toString.call(src) + ', string expected');
+  }
+
+  opt = merge({}, marked.defaults, opt || {});
+  checkSanitizeDeprecation(opt);
+
+  try {
+    const tokens = Lexer_1.lexInline(src, opt);
+    if (opt.walkTokens) {
+      marked.walkTokens(tokens, opt.walkTokens);
+    }
+    return Parser_1.parseInline(tokens, opt);
+  } catch (e) {
+    e.message += '\nPlease report this to https://github.com/markedjs/marked.';
+    if (opt.silent) {
+      return '<p>An error occurred:</p><pre>'
+        + escape(e.message + '', true)
+        + '</pre>';
+    }
+    throw e;
+  }
+};
+
+/**
+ * Expose
+ */
+
+marked.Parser = Parser_1;
+marked.parser = Parser_1.parse;
+
+marked.Renderer = Renderer_1;
+marked.TextRenderer = TextRenderer_1;
+
+marked.Lexer = Lexer_1;
+marked.lexer = Lexer_1.lex;
+
+marked.Tokenizer = Tokenizer_1;
+
+marked.Slugger = Slugger_1;
+
+marked.parse = marked;
+
+var marked_1 = marked;
+
+const SLUG_PRESERVE_UNICODE$1 = false;
+const SLUG_SEPARATOR$1 = '_';
+
 function __extends(d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
     d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
 }
-/** @class */ ((function (_super) {
+
+var whitespace = /\s/;
+var validIdentifierCharacters = /[a-zA-Z_$][a-zA-Z0-9_$]*/;
+var number = /^NaN|(?:[-+]?(?:(?:Infinity)|(?:0[xX][a-fA-F0-9]+)|(?:0[bB][01]+)|(?:0[oO][0-7]+)|(?:(?:(?:[1-9]\d*|0)?\.\d+|(?:[1-9]\d*|0)\.\d*|(?:[1-9]\d*|0))(?:[E|e][+|-]?\d+)?)))/;
+var SINGLE_QUOTE = "'";
+var DOUBLE_QUOTE = '"';
+
+function getLocator(source, options) {
+    if (options === void 0) { options = {}; }
+    var offsetLine = options.offsetLine || 0;
+    var offsetColumn = options.offsetColumn || 0;
+    var originalLines = source.split('\n');
+    var start = 0;
+    var lineRanges = originalLines.map(function (line, i) {
+        var end = start + line.length + 1;
+        var range = { start: start, end: end, line: i };
+        start = end;
+        return range;
+    });
+    var i = 0;
+    function rangeContains(range, index) {
+        return range.start <= index && index < range.end;
+    }
+    function getLocation(range, index) {
+        return { line: offsetLine + range.line, column: offsetColumn + index - range.start, character: index };
+    }
+    function locate(search, startIndex) {
+        if (typeof search === 'string') {
+            search = source.indexOf(search, startIndex || 0);
+        }
+        var range = lineRanges[i];
+        var d = search >= range.end ? 1 : -1;
+        while (range) {
+            if (rangeContains(range, search))
+                return getLocation(range, search);
+            i += d;
+            range = lineRanges[i];
+        }
+    }
+    
+    return locate;
+}
+function locate(source, search, options) {
+    if (typeof options === 'number') {
+        throw new Error('locate takes a { startIndex, offsetLine, offsetColumn } object as the third argument');
+    }
+    return getLocator(source, options)(search, options && options.startIndex);
+}
+
+function parse(str, opts) {
+    var parser = new Parser(str, opts);
+    return parser.value;
+}
+function noop() { }
+var ParseError = /** @class */ (function (_super) {
     __extends(ParseError, _super);
     function ParseError(message, pos, loc) {
         var _this = _super.call(this, message) || this;
@@ -7738,7 +9801,477 @@ function __extends(d, b) {
         return _this;
     }
     return ParseError;
-})(Error));
+}(Error));
+// https://mathiasbynens.be/notes/javascript-escapes
+var escapeable = {
+    b: '\b',
+    n: '\n',
+    f: '\f',
+    r: '\r',
+    t: '\t',
+    v: '\v',
+    0: '\0'
+};
+var hex = /^[a-fA-F0-9]+$/;
+var Parser = /** @class */ (function () {
+    function Parser(str, opts) {
+        this.str = str;
+        this.index = 0;
+        this.onComment = (opts && opts.onComment) || noop;
+        this.onValue = (opts && opts.onValue) || noop;
+        this.value = this.readValue();
+        this.allowWhitespaceOrComment();
+        if (this.index < this.str.length) {
+            throw new Error("Unexpected character '" + this.peek() + "'");
+        }
+    }
+    Parser.prototype.allowWhitespaceOrComment = function () {
+        while (this.index < this.str.length &&
+            whitespace.test(this.str[this.index])) {
+            this.index++;
+        }
+        var start = this.index;
+        if (this.eat('/')) {
+            if (this.eat('/')) {
+                // line comment
+                var text = this.readUntil(/(?:\r\n|\n|\r)/);
+                this.onComment({
+                    start: start,
+                    end: this.index,
+                    type: 'Comment',
+                    text: text,
+                    block: false
+                });
+                this.eat('\n');
+            }
+            else if (this.eat('*')) {
+                // block comment
+                var text = this.readUntil(/\*\//);
+                this.onComment({
+                    start: start,
+                    end: this.index,
+                    type: 'Comment',
+                    text: text,
+                    block: true
+                });
+                this.eat('*/', true);
+            }
+        }
+        else {
+            return;
+        }
+        this.allowWhitespaceOrComment();
+    };
+    Parser.prototype.error = function (message, index) {
+        if (index === void 0) { index = this.index; }
+        var loc = locate(this.str, index, { offsetLine: 1 });
+        throw new ParseError(message, index, loc);
+    };
+    Parser.prototype.eat = function (str, required) {
+        if (this.str.slice(this.index, this.index + str.length) === str) {
+            this.index += str.length;
+            return str;
+        }
+        if (required) {
+            this.error("Expected '" + str + "' instead of '" + this.str[this.index] + "'");
+        }
+        return null;
+    };
+    Parser.prototype.peek = function () {
+        return this.str[this.index];
+    };
+    Parser.prototype.read = function (pattern) {
+        var match = pattern.exec(this.str.slice(this.index));
+        if (!match || match.index !== 0)
+            return null;
+        this.index += match[0].length;
+        return match[0];
+    };
+    Parser.prototype.readUntil = function (pattern) {
+        if (this.index >= this.str.length)
+            this.error('Unexpected end of input');
+        var start = this.index;
+        var match = pattern.exec(this.str.slice(start));
+        if (match) {
+            var start_1 = this.index;
+            this.index = start_1 + match.index;
+            return this.str.slice(start_1, this.index);
+        }
+        this.index = this.str.length;
+        return this.str.slice(start);
+    };
+    Parser.prototype.readArray = function () {
+        var start = this.index;
+        if (!this.eat('['))
+            return null;
+        var array = {
+            start: start,
+            end: null,
+            type: 'ArrayExpression',
+            elements: []
+        };
+        this.allowWhitespaceOrComment();
+        while (this.peek() !== ']') {
+            array.elements.push(this.readValue());
+            this.allowWhitespaceOrComment();
+            if (!this.eat(','))
+                break;
+            this.allowWhitespaceOrComment();
+        }
+        if (!this.eat(']')) {
+            this.error("Expected ']' instead of '" + this.str[this.index] + "'");
+        }
+        array.end = this.index;
+        return array;
+    };
+    Parser.prototype.readBoolean = function () {
+        var start = this.index;
+        var raw = this.read(/^(true|false)/);
+        if (raw) {
+            return {
+                start: start,
+                end: this.index,
+                type: 'Literal',
+                raw: raw,
+                value: raw === 'true'
+            };
+        }
+    };
+    Parser.prototype.readNull = function () {
+        var start = this.index;
+        if (this.eat('null')) {
+            return {
+                start: start,
+                end: this.index,
+                type: 'Literal',
+                raw: 'null',
+                value: null
+            };
+        }
+    };
+    Parser.prototype.readLiteral = function () {
+        return (this.readBoolean() ||
+            this.readNumber() ||
+            this.readString() ||
+            this.readNull());
+    };
+    Parser.prototype.readNumber = function () {
+        var start = this.index;
+        var raw = this.read(number);
+        if (raw) {
+            var sign = raw[0];
+            var value = +(sign === '-' || sign === '+' ? raw.slice(1) : raw);
+            if (sign === '-')
+                value = -value;
+            return {
+                start: start,
+                end: this.index,
+                type: 'Literal',
+                raw: raw,
+                value: value
+            };
+        }
+    };
+    Parser.prototype.readObject = function () {
+        var start = this.index;
+        if (!this.eat('{'))
+            return;
+        var object = {
+            start: start,
+            end: null,
+            type: 'ObjectExpression',
+            properties: []
+        };
+        this.allowWhitespaceOrComment();
+        while (this.peek() !== '}') {
+            object.properties.push(this.readProperty());
+            this.allowWhitespaceOrComment();
+            if (!this.eat(','))
+                break;
+            this.allowWhitespaceOrComment();
+        }
+        this.eat('}', true);
+        object.end = this.index;
+        return object;
+    };
+    Parser.prototype.readProperty = function () {
+        this.allowWhitespaceOrComment();
+        var property = {
+            start: this.index,
+            end: null,
+            type: 'Property',
+            key: this.readPropertyKey(),
+            value: this.readValue()
+        };
+        property.end = this.index;
+        return property;
+    };
+    Parser.prototype.readIdentifier = function () {
+        var start = this.index;
+        var name = this.read(validIdentifierCharacters);
+        if (name) {
+            return {
+                start: start,
+                end: this.index,
+                type: 'Identifier',
+                name: name
+            };
+        }
+    };
+    Parser.prototype.readPropertyKey = function () {
+        var key = this.readString() || this.readIdentifier();
+        if (!key)
+            this.error("Bad identifier as unquoted key");
+        if (key.type === 'Literal') {
+            key.name = String(key.value);
+        }
+        this.allowWhitespaceOrComment();
+        this.eat(':', true);
+        return key;
+    };
+    Parser.prototype.readString = function () {
+        var start = this.index;
+        // const quote = this.read(/^['"]/);
+        var quote = this.eat(SINGLE_QUOTE) || this.eat(DOUBLE_QUOTE);
+        if (!quote)
+            return;
+        var escaped = false;
+        var value = '';
+        while (this.index < this.str.length) {
+            var char_1 = this.str[this.index++];
+            if (escaped) {
+                escaped = false;
+                // line continuations
+                if (char_1 === '\n')
+                    continue;
+                if (char_1 === '\r') {
+                    if (this.str[this.index] === '\n')
+                        this.index += 1;
+                    continue;
+                }
+                if (char_1 === 'x' || char_1 === 'u') {
+                    var start_2 = this.index;
+                    var end = this.index += (char_1 === 'x' ? 2 : 4);
+                    var code = this.str.slice(start_2, end);
+                    if (!hex.test(code))
+                        this.error("Invalid " + (char_1 === 'x' ? 'hexadecimal' : 'Unicode') + " escape sequence", start_2);
+                    value += String.fromCharCode(parseInt(code, 16));
+                }
+                else {
+                    value += escapeable[char_1] || char_1;
+                }
+            }
+            else if (char_1 === '\\') {
+                escaped = true;
+            }
+            else if (char_1 === quote) {
+                var end = this.index;
+                return {
+                    start: start,
+                    end: end,
+                    type: 'Literal',
+                    raw: this.str.slice(start, end),
+                    value: value
+                };
+            }
+            else {
+                if (char_1 === '\n')
+                    this.error("Bad string", this.index - 1);
+                value += char_1;
+            }
+        }
+        this.error("Unexpected end of input");
+    };
+    Parser.prototype.readValue = function () {
+        this.allowWhitespaceOrComment();
+        var value = (this.readArray() ||
+            this.readObject() ||
+            this.readLiteral());
+        if (value) {
+            this.onValue(value);
+            return value;
+        }
+        this.error("Unexpected EOF");
+    };
+    return Parser;
+}());
+
+function evaluate(str) {
+    var ast = parse(str);
+    return getValue(ast);
+}
+function getValue(node) {
+    if (node.type === 'Literal') {
+        return node.value;
+    }
+    if (node.type === 'ArrayExpression') {
+        return node.elements.map(getValue);
+    }
+    if (node.type === 'ObjectExpression') {
+        var obj_1 = {};
+        node.properties.forEach(function (prop) {
+            obj_1[prop.key.name] = getValue(prop.value);
+        });
+        return obj_1;
+    }
+}
+
+const RE_FRONTMATTER = /---\r?\n([\s\S]+?)\r?\n---/;
+
+function extract_frontmatter(markdown) {
+	const match = RE_FRONTMATTER.exec(markdown);
+	const frontMatter = match[1];
+	const content = markdown.slice(match[0].length);
+
+	const metadata = {};
+	frontMatter.split("\n").forEach((pair) => {
+		const colonIndex = pair.indexOf(":");
+		metadata[pair.slice(0, colonIndex).trim()] = pair
+			.slice(colonIndex + 1)
+			.trim();
+	});
+
+	// reset regex
+	RE_FRONTMATTER.lastIndex = 0;
+
+	return { metadata, content };
+}
+
+// TODO: this never runs and is uneeded
+function extract_metadata(line, lang) {
+	try {
+		if (lang === "html" && line.startsWith("<!--") && line.endsWith("-->")) {
+			return evaluate(line.slice(4, -3).trim());
+		}
+
+		if (
+			lang === "js" ||
+			(lang === "json" && line.startsWith("/*") && line.endsWith("*/"))
+		) {
+			return evaluate(line.slice(2, -2).trim());
+		}
+	} catch (err) {
+		// TODO report these errors, don't just squelch them
+		return null;
+	}
+}
+
+// links renderer
+function link_renderer(href, title, text) {
+	let target_attr = "";
+	let title_attr = "";
+
+	if (href.startsWith("http")) {
+		target_attr = ' target="_blank"';
+	}
+
+	if (title !== null) {
+		title_attr = ` title="${title}"`;
+	}
+
+	return `<a href="${href}"${target_attr}${title_attr} rel="noopener noreferrer">${text}</a>`;
+}
+
+var escapeStringRegexp$1 = string => {
+	if (typeof string !== 'string') {
+		throw new TypeError('Expected a string');
+	}
+
+	// Escape characters with special meaning either inside or outside character sets.
+	// Use a simple backslash escape when it’s always valid, and a \unnnn escape when the simpler form would be disallowed by Unicode patterns’ stricter grammar.
+	return string
+		.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&')
+		.replace(/-/g, '\\x2d');
+};
+
+/**
+ * lodash (Custom Build) <https://lodash.com/>
+ * Build: `lodash modularize exports="npm" -o ./`
+ * Copyright jQuery Foundation and other contributors <https://jquery.org/>
+ * Released under MIT license <https://lodash.com/license>
+ * Based on Underscore.js 1.8.3 <http://underscorejs.org/LICENSE>
+ * Copyright Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
+ */
+
+/** Used as references for various `Number` constants. */
+var INFINITY = 1 / 0;
+
+/** `Object#toString` result references. */
+var symbolTag = '[object Symbol]';
+
+/** Used to match Latin Unicode letters (excluding mathematical operators). */
+var reLatin = /[\xc0-\xd6\xd8-\xf6\xf8-\xff\u0100-\u017f]/g;
+
+/** Used to compose unicode character classes. */
+var rsComboMarksRange = '\\u0300-\\u036f\\ufe20-\\ufe23',
+    rsComboSymbolsRange = '\\u20d0-\\u20f0';
+
+/** Used to compose unicode capture groups. */
+var rsCombo = '[' + rsComboMarksRange + rsComboSymbolsRange + ']';
+
+/**
+ * Used to match [combining diacritical marks](https://en.wikipedia.org/wiki/Combining_Diacritical_Marks) and
+ * [combining diacritical marks for symbols](https://en.wikipedia.org/wiki/Combining_Diacritical_Marks_for_Symbols).
+ */
+var reComboMark = RegExp(rsCombo, 'g');
+
+/** Used to map Latin Unicode letters to basic Latin letters. */
+var deburredLetters = {
+  // Latin-1 Supplement block.
+  '\xc0': 'A',  '\xc1': 'A', '\xc2': 'A', '\xc3': 'A', '\xc4': 'A', '\xc5': 'A',
+  '\xe0': 'a',  '\xe1': 'a', '\xe2': 'a', '\xe3': 'a', '\xe4': 'a', '\xe5': 'a',
+  '\xc7': 'C',  '\xe7': 'c',
+  '\xd0': 'D',  '\xf0': 'd',
+  '\xc8': 'E',  '\xc9': 'E', '\xca': 'E', '\xcb': 'E',
+  '\xe8': 'e',  '\xe9': 'e', '\xea': 'e', '\xeb': 'e',
+  '\xcc': 'I',  '\xcd': 'I', '\xce': 'I', '\xcf': 'I',
+  '\xec': 'i',  '\xed': 'i', '\xee': 'i', '\xef': 'i',
+  '\xd1': 'N',  '\xf1': 'n',
+  '\xd2': 'O',  '\xd3': 'O', '\xd4': 'O', '\xd5': 'O', '\xd6': 'O', '\xd8': 'O',
+  '\xf2': 'o',  '\xf3': 'o', '\xf4': 'o', '\xf5': 'o', '\xf6': 'o', '\xf8': 'o',
+  '\xd9': 'U',  '\xda': 'U', '\xdb': 'U', '\xdc': 'U',
+  '\xf9': 'u',  '\xfa': 'u', '\xfb': 'u', '\xfc': 'u',
+  '\xdd': 'Y',  '\xfd': 'y', '\xff': 'y',
+  '\xc6': 'Ae', '\xe6': 'ae',
+  '\xde': 'Th', '\xfe': 'th',
+  '\xdf': 'ss',
+  // Latin Extended-A block.
+  '\u0100': 'A',  '\u0102': 'A', '\u0104': 'A',
+  '\u0101': 'a',  '\u0103': 'a', '\u0105': 'a',
+  '\u0106': 'C',  '\u0108': 'C', '\u010a': 'C', '\u010c': 'C',
+  '\u0107': 'c',  '\u0109': 'c', '\u010b': 'c', '\u010d': 'c',
+  '\u010e': 'D',  '\u0110': 'D', '\u010f': 'd', '\u0111': 'd',
+  '\u0112': 'E',  '\u0114': 'E', '\u0116': 'E', '\u0118': 'E', '\u011a': 'E',
+  '\u0113': 'e',  '\u0115': 'e', '\u0117': 'e', '\u0119': 'e', '\u011b': 'e',
+  '\u011c': 'G',  '\u011e': 'G', '\u0120': 'G', '\u0122': 'G',
+  '\u011d': 'g',  '\u011f': 'g', '\u0121': 'g', '\u0123': 'g',
+  '\u0124': 'H',  '\u0126': 'H', '\u0125': 'h', '\u0127': 'h',
+  '\u0128': 'I',  '\u012a': 'I', '\u012c': 'I', '\u012e': 'I', '\u0130': 'I',
+  '\u0129': 'i',  '\u012b': 'i', '\u012d': 'i', '\u012f': 'i', '\u0131': 'i',
+  '\u0134': 'J',  '\u0135': 'j',
+  '\u0136': 'K',  '\u0137': 'k', '\u0138': 'k',
+  '\u0139': 'L',  '\u013b': 'L', '\u013d': 'L', '\u013f': 'L', '\u0141': 'L',
+  '\u013a': 'l',  '\u013c': 'l', '\u013e': 'l', '\u0140': 'l', '\u0142': 'l',
+  '\u0143': 'N',  '\u0145': 'N', '\u0147': 'N', '\u014a': 'N',
+  '\u0144': 'n',  '\u0146': 'n', '\u0148': 'n', '\u014b': 'n',
+  '\u014c': 'O',  '\u014e': 'O', '\u0150': 'O',
+  '\u014d': 'o',  '\u014f': 'o', '\u0151': 'o',
+  '\u0154': 'R',  '\u0156': 'R', '\u0158': 'R',
+  '\u0155': 'r',  '\u0157': 'r', '\u0159': 'r',
+  '\u015a': 'S',  '\u015c': 'S', '\u015e': 'S', '\u0160': 'S',
+  '\u015b': 's',  '\u015d': 's', '\u015f': 's', '\u0161': 's',
+  '\u0162': 'T',  '\u0164': 'T', '\u0166': 'T',
+  '\u0163': 't',  '\u0165': 't', '\u0167': 't',
+  '\u0168': 'U',  '\u016a': 'U', '\u016c': 'U', '\u016e': 'U', '\u0170': 'U', '\u0172': 'U',
+  '\u0169': 'u',  '\u016b': 'u', '\u016d': 'u', '\u016f': 'u', '\u0171': 'u', '\u0173': 'u',
+  '\u0174': 'W',  '\u0175': 'w',
+  '\u0176': 'Y',  '\u0177': 'y', '\u0178': 'Y',
+  '\u0179': 'Z',  '\u017b': 'Z', '\u017d': 'Z',
+  '\u017a': 'z',  '\u017c': 'z', '\u017e': 'z',
+  '\u0132': 'IJ', '\u0133': 'ij',
+  '\u0152': 'Oe', '\u0153': 'oe',
+  '\u0149': "'n", '\u017f': 'ss'
+};
 
 /** Detect free variable `global` from Node.js. */
 var freeGlobal = typeof commonjsGlobal == 'object' && commonjsGlobal && commonjsGlobal.Object === Object && commonjsGlobal;
@@ -7749,14 +10282,1152 @@ var freeSelf = typeof self == 'object' && self && self.Object === Object && self
 /** Used as a reference to the global object. */
 var root = freeGlobal || freeSelf || Function('return this')();
 
+/**
+ * The base implementation of `_.propertyOf` without support for deep paths.
+ *
+ * @private
+ * @param {Object} object The object to query.
+ * @returns {Function} Returns the new accessor function.
+ */
+function basePropertyOf(object) {
+  return function(key) {
+    return object == null ? undefined : object[key];
+  };
+}
+
+/**
+ * Used by `_.deburr` to convert Latin-1 Supplement and Latin Extended-A
+ * letters to basic Latin letters.
+ *
+ * @private
+ * @param {string} letter The matched letter to deburr.
+ * @returns {string} Returns the deburred letter.
+ */
+var deburrLetter = basePropertyOf(deburredLetters);
+
+/** Used for built-in method references. */
+var objectProto = Object.prototype;
+
+/**
+ * Used to resolve the
+ * [`toStringTag`](http://ecma-international.org/ecma-262/7.0/#sec-object.prototype.tostring)
+ * of values.
+ */
+var objectToString = objectProto.toString;
+
 /** Built-in value references. */
 var Symbol$1 = root.Symbol;
 
 /** Used to convert symbols to primitives and strings. */
-var symbolProto = Symbol$1 ? Symbol$1.prototype : undefined;
-    symbolProto ? symbolProto.toString : undefined;
+var symbolProto = Symbol$1 ? Symbol$1.prototype : undefined,
+    symbolToString = symbolProto ? symbolProto.toString : undefined;
 
-createCommonjsModule(function (module) {
+/**
+ * The base implementation of `_.toString` which doesn't convert nullish
+ * values to empty strings.
+ *
+ * @private
+ * @param {*} value The value to process.
+ * @returns {string} Returns the string.
+ */
+function baseToString(value) {
+  // Exit early for strings to avoid a performance hit in some environments.
+  if (typeof value == 'string') {
+    return value;
+  }
+  if (isSymbol(value)) {
+    return symbolToString ? symbolToString.call(value) : '';
+  }
+  var result = (value + '');
+  return (result == '0' && (1 / value) == -INFINITY) ? '-0' : result;
+}
+
+/**
+ * Checks if `value` is object-like. A value is object-like if it's not `null`
+ * and has a `typeof` result of "object".
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is object-like, else `false`.
+ * @example
+ *
+ * _.isObjectLike({});
+ * // => true
+ *
+ * _.isObjectLike([1, 2, 3]);
+ * // => true
+ *
+ * _.isObjectLike(_.noop);
+ * // => false
+ *
+ * _.isObjectLike(null);
+ * // => false
+ */
+function isObjectLike(value) {
+  return !!value && typeof value == 'object';
+}
+
+/**
+ * Checks if `value` is classified as a `Symbol` primitive or object.
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to check.
+ * @returns {boolean} Returns `true` if `value` is a symbol, else `false`.
+ * @example
+ *
+ * _.isSymbol(Symbol.iterator);
+ * // => true
+ *
+ * _.isSymbol('abc');
+ * // => false
+ */
+function isSymbol(value) {
+  return typeof value == 'symbol' ||
+    (isObjectLike(value) && objectToString.call(value) == symbolTag);
+}
+
+/**
+ * Converts `value` to a string. An empty string is returned for `null`
+ * and `undefined` values. The sign of `-0` is preserved.
+ *
+ * @static
+ * @memberOf _
+ * @since 4.0.0
+ * @category Lang
+ * @param {*} value The value to process.
+ * @returns {string} Returns the string.
+ * @example
+ *
+ * _.toString(null);
+ * // => ''
+ *
+ * _.toString(-0);
+ * // => '-0'
+ *
+ * _.toString([1, 2, 3]);
+ * // => '1,2,3'
+ */
+function toString(value) {
+  return value == null ? '' : baseToString(value);
+}
+
+/**
+ * Deburrs `string` by converting
+ * [Latin-1 Supplement](https://en.wikipedia.org/wiki/Latin-1_Supplement_(Unicode_block)#Character_table)
+ * and [Latin Extended-A](https://en.wikipedia.org/wiki/Latin_Extended-A)
+ * letters to basic Latin letters and removing
+ * [combining diacritical marks](https://en.wikipedia.org/wiki/Combining_Diacritical_Marks).
+ *
+ * @static
+ * @memberOf _
+ * @since 3.0.0
+ * @category String
+ * @param {string} [string=''] The string to deburr.
+ * @returns {string} Returns the deburred string.
+ * @example
+ *
+ * _.deburr('déjà vu');
+ * // => 'deja vu'
+ */
+function deburr(string) {
+  string = toString(string);
+  return string && string.replace(reLatin, deburrLetter).replace(reComboMark, '');
+}
+
+var lodash_deburr = deburr;
+
+const matchOperatorsRegex = /[|\\{}()[\]^$+*?.-]/g;
+
+var escapeStringRegexp = string => {
+	if (typeof string !== 'string') {
+		throw new TypeError('Expected a string');
+	}
+
+	return string.replace(matchOperatorsRegex, '\\$&');
+};
+
+var replacements = [
+	// German umlauts
+	['ß', 'ss'],
+	['ä', 'ae'],
+	['Ä', 'Ae'],
+	['ö', 'oe'],
+	['Ö', 'Oe'],
+	['ü', 'ue'],
+	['Ü', 'Ue'],
+
+	// Latin
+	['À', 'A'],
+	['Á', 'A'],
+	['Â', 'A'],
+	['Ã', 'A'],
+	['Ä', 'Ae'],
+	['Å', 'A'],
+	['Æ', 'AE'],
+	['Ç', 'C'],
+	['È', 'E'],
+	['É', 'E'],
+	['Ê', 'E'],
+	['Ë', 'E'],
+	['Ì', 'I'],
+	['Í', 'I'],
+	['Î', 'I'],
+	['Ï', 'I'],
+	['Ð', 'D'],
+	['Ñ', 'N'],
+	['Ò', 'O'],
+	['Ó', 'O'],
+	['Ô', 'O'],
+	['Õ', 'O'],
+	['Ö', 'Oe'],
+	['Ő', 'O'],
+	['Ø', 'O'],
+	['Ù', 'U'],
+	['Ú', 'U'],
+	['Û', 'U'],
+	['Ü', 'Ue'],
+	['Ű', 'U'],
+	['Ý', 'Y'],
+	['Þ', 'TH'],
+	['ß', 'ss'],
+	['à', 'a'],
+	['á', 'a'],
+	['â', 'a'],
+	['ã', 'a'],
+	['ä', 'ae'],
+	['å', 'a'],
+	['æ', 'ae'],
+	['ç', 'c'],
+	['è', 'e'],
+	['é', 'e'],
+	['ê', 'e'],
+	['ë', 'e'],
+	['ì', 'i'],
+	['í', 'i'],
+	['î', 'i'],
+	['ï', 'i'],
+	['ð', 'd'],
+	['ñ', 'n'],
+	['ò', 'o'],
+	['ó', 'o'],
+	['ô', 'o'],
+	['õ', 'o'],
+	['ö', 'oe'],
+	['ő', 'o'],
+	['ø', 'o'],
+	['ù', 'u'],
+	['ú', 'u'],
+	['û', 'u'],
+	['ü', 'ue'],
+	['ű', 'u'],
+	['ý', 'y'],
+	['þ', 'th'],
+	['ÿ', 'y'],
+	['ẞ', 'SS'],
+
+	// Vietnamese
+	['à', 'a'],
+	['À', 'A'],
+	['á', 'a'],
+	['Á', 'A'],
+	['â', 'a'],
+	['Â', 'A'],
+	['ã', 'a'],
+	['Ã', 'A'],
+	['è', 'e'],
+	['È', 'E'],
+	['é', 'e'],
+	['É', 'E'],
+	['ê', 'e'],
+	['Ê', 'E'],
+	['ì', 'i'],
+	['Ì', 'I'],
+	['í', 'i'],
+	['Í', 'I'],
+	['ò', 'o'],
+	['Ò', 'O'],
+	['ó', 'o'],
+	['Ó', 'O'],
+	['ô', 'o'],
+	['Ô', 'O'],
+	['õ', 'o'],
+	['Õ', 'O'],
+	['ù', 'u'],
+	['Ù', 'U'],
+	['ú', 'u'],
+	['Ú', 'U'],
+	['ý', 'y'],
+	['Ý', 'Y'],
+	['ă', 'a'],
+	['Ă', 'A'],
+	['Đ', 'D'],
+	['đ', 'd'],
+	['ĩ', 'i'],
+	['Ĩ', 'I'],
+	['ũ', 'u'],
+	['Ũ', 'U'],
+	['ơ', 'o'],
+	['Ơ', 'O'],
+	['ư', 'u'],
+	['Ư', 'U'],
+	['ạ', 'a'],
+	['Ạ', 'A'],
+	['ả', 'a'],
+	['Ả', 'A'],
+	['ấ', 'a'],
+	['Ấ', 'A'],
+	['ầ', 'a'],
+	['Ầ', 'A'],
+	['ẩ', 'a'],
+	['Ẩ', 'A'],
+	['ẫ', 'a'],
+	['Ẫ', 'A'],
+	['ậ', 'a'],
+	['Ậ', 'A'],
+	['ắ', 'a'],
+	['Ắ', 'A'],
+	['ằ', 'a'],
+	['Ằ', 'A'],
+	['ẳ', 'a'],
+	['Ẳ', 'A'],
+	['ẵ', 'a'],
+	['Ẵ', 'A'],
+	['ặ', 'a'],
+	['Ặ', 'A'],
+	['ẹ', 'e'],
+	['Ẹ', 'E'],
+	['ẻ', 'e'],
+	['Ẻ', 'E'],
+	['ẽ', 'e'],
+	['Ẽ', 'E'],
+	['ế', 'e'],
+	['Ế', 'E'],
+	['ề', 'e'],
+	['Ề', 'E'],
+	['ể', 'e'],
+	['Ể', 'E'],
+	['ễ', 'e'],
+	['Ễ', 'E'],
+	['ệ', 'e'],
+	['Ệ', 'E'],
+	['ỉ', 'i'],
+	['Ỉ', 'I'],
+	['ị', 'i'],
+	['Ị', 'I'],
+	['ọ', 'o'],
+	['Ọ', 'O'],
+	['ỏ', 'o'],
+	['Ỏ', 'O'],
+	['ố', 'o'],
+	['Ố', 'O'],
+	['ồ', 'o'],
+	['Ồ', 'O'],
+	['ổ', 'o'],
+	['Ổ', 'O'],
+	['ỗ', 'o'],
+	['Ỗ', 'O'],
+	['ộ', 'o'],
+	['Ộ', 'O'],
+	['ớ', 'o'],
+	['Ớ', 'O'],
+	['ờ', 'o'],
+	['Ờ', 'O'],
+	['ở', 'o'],
+	['Ở', 'O'],
+	['ỡ', 'o'],
+	['Ỡ', 'O'],
+	['ợ', 'o'],
+	['Ợ', 'O'],
+	['ụ', 'u'],
+	['Ụ', 'U'],
+	['ủ', 'u'],
+	['Ủ', 'U'],
+	['ứ', 'u'],
+	['Ứ', 'U'],
+	['ừ', 'u'],
+	['Ừ', 'U'],
+	['ử', 'u'],
+	['Ử', 'U'],
+	['ữ', 'u'],
+	['Ữ', 'U'],
+	['ự', 'u'],
+	['Ự', 'U'],
+	['ỳ', 'y'],
+	['Ỳ', 'Y'],
+	['ỵ', 'y'],
+	['Ỵ', 'Y'],
+	['ỷ', 'y'],
+	['Ỷ', 'Y'],
+	['ỹ', 'y'],
+	['Ỹ', 'Y'],
+
+	// Arabic
+	['ء', 'e'],
+	['آ', 'a'],
+	['أ', 'a'],
+	['ؤ', 'w'],
+	['إ', 'i'],
+	['ئ', 'y'],
+	['ا', 'a'],
+	['ب', 'b'],
+	['ة', 't'],
+	['ت', 't'],
+	['ث', 'th'],
+	['ج', 'j'],
+	['ح', 'h'],
+	['خ', 'kh'],
+	['د', 'd'],
+	['ذ', 'dh'],
+	['ر', 'r'],
+	['ز', 'z'],
+	['س', 's'],
+	['ش', 'sh'],
+	['ص', 's'],
+	['ض', 'd'],
+	['ط', 't'],
+	['ظ', 'z'],
+	['ع', 'e'],
+	['غ', 'gh'],
+	['ـ', '_'],
+	['ف', 'f'],
+	['ق', 'q'],
+	['ك', 'k'],
+	['ل', 'l'],
+	['م', 'm'],
+	['ن', 'n'],
+	['ه', 'h'],
+	['و', 'w'],
+	['ى', 'a'],
+	['ي', 'y'],
+	['َ‎', 'a'],
+	['ُ', 'u'],
+	['ِ‎', 'i'],
+	['٠', '0'],
+	['١', '1'],
+	['٢', '2'],
+	['٣', '3'],
+	['٤', '4'],
+	['٥', '5'],
+	['٦', '6'],
+	['٧', '7'],
+	['٨', '8'],
+	['٩', '9'],
+
+	// Persian / Farsi
+	['چ', 'ch'],
+	['ک', 'k'],
+	['گ', 'g'],
+	['پ', 'p'],
+	['ژ', 'zh'],
+	['ی', 'y'],
+	['۰', '0'],
+	['۱', '1'],
+	['۲', '2'],
+	['۳', '3'],
+	['۴', '4'],
+	['۵', '5'],
+	['۶', '6'],
+	['۷', '7'],
+	['۸', '8'],
+	['۹', '9'],
+
+	// Pashto
+	['ټ', 'p'],
+	['ځ', 'z'],
+	['څ', 'c'],
+	['ډ', 'd'],
+	['ﺫ', 'd'],
+	['ﺭ', 'r'],
+	['ړ', 'r'],
+	['ﺯ', 'z'],
+	['ږ', 'g'],
+	['ښ', 'x'],
+	['ګ', 'g'],
+	['ڼ', 'n'],
+	['ۀ', 'e'],
+	['ې', 'e'],
+	['ۍ', 'ai'],
+
+	// Urdu
+	['ٹ', 't'],
+	['ڈ', 'd'],
+	['ڑ', 'r'],
+	['ں', 'n'],
+	['ہ', 'h'],
+	['ھ', 'h'],
+	['ے', 'e'],
+
+	// Russian
+	['А', 'A'],
+	['а', 'a'],
+	['Б', 'B'],
+	['б', 'b'],
+	['В', 'V'],
+	['в', 'v'],
+	['Г', 'G'],
+	['г', 'g'],
+	['Д', 'D'],
+	['д', 'd'],
+	['Е', 'E'],
+	['е', 'e'],
+	['Ж', 'Zh'],
+	['ж', 'zh'],
+	['З', 'Z'],
+	['з', 'z'],
+	['И', 'I'],
+	['и', 'i'],
+	['Й', 'J'],
+	['й', 'j'],
+	['К', 'K'],
+	['к', 'k'],
+	['Л', 'L'],
+	['л', 'l'],
+	['М', 'M'],
+	['м', 'm'],
+	['Н', 'N'],
+	['н', 'n'],
+	['О', 'O'],
+	['о', 'o'],
+	['П', 'P'],
+	['п', 'p'],
+	['Р', 'R'],
+	['р', 'r'],
+	['С', 'S'],
+	['с', 's'],
+	['Т', 'T'],
+	['т', 't'],
+	['У', 'U'],
+	['у', 'u'],
+	['Ф', 'F'],
+	['ф', 'f'],
+	['Х', 'H'],
+	['х', 'h'],
+	['Ц', 'Cz'],
+	['ц', 'cz'],
+	['Ч', 'Ch'],
+	['ч', 'ch'],
+	['Ш', 'Sh'],
+	['ш', 'sh'],
+	['Щ', 'Shh'],
+	['щ', 'shh'],
+	['Ъ', ''],
+	['ъ', ''],
+	['Ы', 'Y'],
+	['ы', 'y'],
+	['Ь', ''],
+	['ь', ''],
+	['Э', 'E'],
+	['э', 'e'],
+	['Ю', 'Yu'],
+	['ю', 'yu'],
+	['Я', 'Ya'],
+	['я', 'ya'],
+	['Ё', 'Yo'],
+	['ё', 'yo'],
+
+	// Romanian
+	['ă', 'a'],
+	['Ă', 'A'],
+	['ș', 's'],
+	['Ș', 'S'],
+	['ț', 't'],
+	['Ț', 'T'],
+	['ţ', 't'],
+	['Ţ', 'T'],
+
+	// Turkish
+	['ş', 's'],
+	['Ş', 'S'],
+	['ç', 'c'],
+	['Ç', 'C'],
+	['ğ', 'g'],
+	['Ğ', 'G'],
+	['ı', 'i'],
+	['İ', 'I'],
+
+	// Armenian
+	['ա', 'a'],
+	['բ', 'b'],
+	['գ', 'g'],
+	['դ', 'd'],
+	['ե', 'ye'],
+	['զ', 'z'],
+	['է', 'e'],
+	['ը', 'u'],
+	['թ', 't'],
+	['ժ', 'zh'],
+	['ի', 'i'],
+	['լ', 'l'],
+	['խ', 'kh'],
+	['ծ', 'ts'],
+	['կ', 'k'],
+	['հ', 'h'],
+	['ձ', 'dz'],
+	['ղ', 'r'],
+	['ճ', 'j'],
+	['մ', 'm'],
+	['յ', 'j'],
+	['ն', 'n'],
+	['շ', 'sh'],
+	['ո', 'vo'],
+	['չ', 'ch'],
+	['պ', 'p'],
+	['ջ', 'j'],
+	['ռ', 'r'],
+	['ս', 's'],
+	['վ', 'v'],
+	['տ', 't'],
+	['ր', 're'],
+	['ց', 'ts'],
+	['ու', 'u'],
+	['ւ', 'v'],
+	['փ', 'p'],
+	['ք', 'q'],
+	['օ', 'o'],
+	['ֆ', 'f'],
+	['և', 'yev'],
+
+	// Georgian
+	['ა', 'a'],
+	['ბ', 'b'],
+	['გ', 'g'],
+	['დ', 'd'],
+	['ე', 'e'],
+	['ვ', 'v'],
+	['ზ', 'z'],
+	['თ', 't'],
+	['ი', 'i'],
+	['კ', 'k'],
+	['ლ', 'l'],
+	['მ', 'm'],
+	['ნ', 'n'],
+	['ო', 'o'],
+	['პ', 'p'],
+	['ჟ', 'zh'],
+	['რ', 'r'],
+	['ს', 's'],
+	['ტ', 't'],
+	['უ', 'u'],
+	['ფ', 'ph'],
+	['ქ', 'q'],
+	['ღ', 'gh'],
+	['ყ', 'k'],
+	['შ', 'sh'],
+	['ჩ', 'ch'],
+	['ც', 'ts'],
+	['ძ', 'dz'],
+	['წ', 'ts'],
+	['ჭ', 'tch'],
+	['ხ', 'kh'],
+	['ჯ', 'j'],
+	['ჰ', 'h'],
+
+	// Czech
+	['č', 'c'],
+	['ď', 'd'],
+	['ě', 'e'],
+	['ň', 'n'],
+	['ř', 'r'],
+	['š', 's'],
+	['ť', 't'],
+	['ů', 'u'],
+	['ž', 'z'],
+	['Č', 'C'],
+	['Ď', 'D'],
+	['Ě', 'E'],
+	['Ň', 'N'],
+	['Ř', 'R'],
+	['Š', 'S'],
+	['Ť', 'T'],
+	['Ů', 'U'],
+	['Ž', 'Z'],
+
+	// Dhivehi
+	['ހ', 'h'],
+	['ށ', 'sh'],
+	['ނ', 'n'],
+	['ރ', 'r'],
+	['ބ', 'b'],
+	['ޅ', 'lh'],
+	['ކ', 'k'],
+	['އ', 'a'],
+	['ވ', 'v'],
+	['މ', 'm'],
+	['ފ', 'f'],
+	['ދ', 'dh'],
+	['ތ', 'th'],
+	['ލ', 'l'],
+	['ގ', 'g'],
+	['ޏ', 'gn'],
+	['ސ', 's'],
+	['ޑ', 'd'],
+	['ޒ', 'z'],
+	['ޓ', 't'],
+	['ޔ', 'y'],
+	['ޕ', 'p'],
+	['ޖ', 'j'],
+	['ޗ', 'ch'],
+	['ޘ', 'tt'],
+	['ޙ', 'hh'],
+	['ޚ', 'kh'],
+	['ޛ', 'th'],
+	['ޜ', 'z'],
+	['ޝ', 'sh'],
+	['ޞ', 's'],
+	['ޟ', 'd'],
+	['ޠ', 't'],
+	['ޡ', 'z'],
+	['ޢ', 'a'],
+	['ޣ', 'gh'],
+	['ޤ', 'q'],
+	['ޥ', 'w'],
+	['ަ', 'a'],
+	['ާ', 'aa'],
+	['ި', 'i'],
+	['ީ', 'ee'],
+	['ު', 'u'],
+	['ޫ', 'oo'],
+	['ެ', 'e'],
+	['ޭ', 'ey'],
+	['ޮ', 'o'],
+	['ޯ', 'oa'],
+	['ް', ''],
+
+	// Greek
+	['α', 'a'],
+	['β', 'v'],
+	['γ', 'g'],
+	['δ', 'd'],
+	['ε', 'e'],
+	['ζ', 'z'],
+	['η', 'i'],
+	['θ', 'th'],
+	['ι', 'i'],
+	['κ', 'k'],
+	['λ', 'l'],
+	['μ', 'm'],
+	['ν', 'n'],
+	['ξ', 'ks'],
+	['ο', 'o'],
+	['π', 'p'],
+	['ρ', 'r'],
+	['σ', 's'],
+	['τ', 't'],
+	['υ', 'y'],
+	['φ', 'f'],
+	['χ', 'x'],
+	['ψ', 'ps'],
+	['ω', 'o'],
+	['ά', 'a'],
+	['έ', 'e'],
+	['ί', 'i'],
+	['ό', 'o'],
+	['ύ', 'y'],
+	['ή', 'i'],
+	['ώ', 'o'],
+	['ς', 's'],
+	['ϊ', 'i'],
+	['ΰ', 'y'],
+	['ϋ', 'y'],
+	['ΐ', 'i'],
+	['Α', 'A'],
+	['Β', 'B'],
+	['Γ', 'G'],
+	['Δ', 'D'],
+	['Ε', 'E'],
+	['Ζ', 'Z'],
+	['Η', 'I'],
+	['Θ', 'TH'],
+	['Ι', 'I'],
+	['Κ', 'K'],
+	['Λ', 'L'],
+	['Μ', 'M'],
+	['Ν', 'N'],
+	['Ξ', 'KS'],
+	['Ο', 'O'],
+	['Π', 'P'],
+	['Ρ', 'R'],
+	['Σ', 'S'],
+	['Τ', 'T'],
+	['Υ', 'Y'],
+	['Φ', 'F'],
+	['Χ', 'X'],
+	['Ψ', 'PS'],
+	['Ω', 'O'],
+	['Ά', 'A'],
+	['Έ', 'E'],
+	['Ί', 'I'],
+	['Ό', 'O'],
+	['Ύ', 'Y'],
+	['Ή', 'I'],
+	['Ώ', 'O'],
+	['Ϊ', 'I'],
+	['Ϋ', 'Y'],
+
+	// Disabled as it conflicts with German and Latin.
+	// Hungarian
+	// ['ä', 'a'],
+	// ['Ä', 'A'],
+	// ['ö', 'o'],
+	// ['Ö', 'O'],
+	// ['ü', 'u'],
+	// ['Ü', 'U'],
+	// ['ű', 'u'],
+	// ['Ű', 'U'],
+
+	// Latvian
+	['ā', 'a'],
+	['ē', 'e'],
+	['ģ', 'g'],
+	['ī', 'i'],
+	['ķ', 'k'],
+	['ļ', 'l'],
+	['ņ', 'n'],
+	['ū', 'u'],
+	['Ā', 'A'],
+	['Ē', 'E'],
+	['Ģ', 'G'],
+	['Ī', 'I'],
+	['Ķ', 'K'],
+	['Ļ', 'L'],
+	['Ņ', 'N'],
+	['Ū', 'U'],
+	['č', 'c'],
+	['š', 's'],
+	['ž', 'z'],
+	['Č', 'C'],
+	['Š', 'S'],
+	['Ž', 'Z'],
+
+	// Lithuanian
+	['ą', 'a'],
+	['č', 'c'],
+	['ę', 'e'],
+	['ė', 'e'],
+	['į', 'i'],
+	['š', 's'],
+	['ų', 'u'],
+	['ū', 'u'],
+	['ž', 'z'],
+	['Ą', 'A'],
+	['Č', 'C'],
+	['Ę', 'E'],
+	['Ė', 'E'],
+	['Į', 'I'],
+	['Š', 'S'],
+	['Ų', 'U'],
+	['Ū', 'U'],
+
+	// Macedonian
+	['Ќ', 'Kj'],
+	['ќ', 'kj'],
+	['Љ', 'Lj'],
+	['љ', 'lj'],
+	['Њ', 'Nj'],
+	['њ', 'nj'],
+	['Тс', 'Ts'],
+	['тс', 'ts'],
+
+	// Polish
+	['ą', 'a'],
+	['ć', 'c'],
+	['ę', 'e'],
+	['ł', 'l'],
+	['ń', 'n'],
+	['ś', 's'],
+	['ź', 'z'],
+	['ż', 'z'],
+	['Ą', 'A'],
+	['Ć', 'C'],
+	['Ę', 'E'],
+	['Ł', 'L'],
+	['Ń', 'N'],
+	['Ś', 'S'],
+	['Ź', 'Z'],
+	['Ż', 'Z'],
+
+	// Disabled as it conflicts with Vietnamese.
+	// Serbian
+	// ['љ', 'lj'],
+	// ['њ', 'nj'],
+	// ['Љ', 'Lj'],
+	// ['Њ', 'Nj'],
+	// ['đ', 'dj'],
+	// ['Đ', 'Dj'],
+	// ['ђ', 'dj'],
+	// ['ј', 'j'],
+	// ['ћ', 'c'],
+	// ['џ', 'dz'],
+	// ['Ђ', 'Dj'],
+	// ['Ј', 'j'],
+	// ['Ћ', 'C'],
+	// ['Џ', 'Dz'],
+
+	// Disabled as it conflicts with German and Latin.
+	// Slovak
+	// ['ä', 'a'],
+	// ['Ä', 'A'],
+	// ['ľ', 'l'],
+	// ['ĺ', 'l'],
+	// ['ŕ', 'r'],
+	// ['Ľ', 'L'],
+	// ['Ĺ', 'L'],
+	// ['Ŕ', 'R'],
+
+	// Disabled as it conflicts with German and Latin.
+	// Swedish
+	// ['å', 'o'],
+	// ['Å', 'o'],
+	// ['ä', 'a'],
+	// ['Ä', 'A'],
+	// ['ë', 'e'],
+	// ['Ë', 'E'],
+	// ['ö', 'o'],
+	// ['Ö', 'O'],
+
+	// Ukrainian
+	['Є', 'Ye'],
+	['І', 'I'],
+	['Ї', 'Yi'],
+	['Ґ', 'G'],
+	['є', 'ye'],
+	['і', 'i'],
+	['ї', 'yi'],
+	['ґ', 'g']
+
+	// Danish
+	// ['Æ', 'Ae'],
+	// ['Ø', 'Oe'],
+	// ['Å', 'Aa'],
+	// ['æ', 'ae'],
+	// ['ø', 'oe'],
+	// ['å', 'aa']
+];
+
+const doCustomReplacements = (string, replacements) => {
+	for (const [key, value] of replacements) {
+		// TODO: Use `String#replaceAll()` when targeting Node.js 16.
+		string = string.replace(new RegExp(escapeStringRegexp(key), 'g'), value);
+	}
+
+	return string;
+};
+
+var transliterate = (string, options) => {
+	if (typeof string !== 'string') {
+		throw new TypeError(`Expected a string, got \`${typeof string}\``);
+	}
+
+	options = {
+		customReplacements: [],
+		...options
+	};
+
+	const customReplacements = new Map([
+		...replacements,
+		...options.customReplacements
+	]);
+
+	string = string.normalize();
+	string = doCustomReplacements(string, customReplacements);
+	string = lodash_deburr(string);
+
+	return string;
+};
+
+var overridableReplacements = [
+	['&', ' and '],
+	['🦄', ' unicorn '],
+	['♥', ' love ']
+];
+
+const decamelize = string => {
+	return string
+		// Separate capitalized words.
+		.replace(/([A-Z]{2,})(\d+)/g, '$1 $2')
+		.replace(/([a-z\d]+)([A-Z]{2,})/g, '$1 $2')
+
+		.replace(/([a-z\d])([A-Z])/g, '$1 $2')
+		.replace(/([A-Z]+)([A-Z][a-z\d]+)/g, '$1 $2');
+};
+
+const removeMootSeparators = (string, separator) => {
+	const escapedSeparator = escapeStringRegexp$1(separator);
+
+	return string
+		.replace(new RegExp(`${escapedSeparator}{2,}`, 'g'), separator)
+		.replace(new RegExp(`^${escapedSeparator}|${escapedSeparator}$`, 'g'), '');
+};
+
+const slugify = (string, options) => {
+	if (typeof string !== 'string') {
+		throw new TypeError(`Expected a string, got \`${typeof string}\``);
+	}
+
+	options = {
+		separator: '-',
+		lowercase: true,
+		decamelize: true,
+		customReplacements: [],
+		preserveLeadingUnderscore: false,
+		...options
+	};
+
+	const shouldPrependUnderscore = options.preserveLeadingUnderscore && string.startsWith('_');
+
+	const customReplacements = new Map([
+		...overridableReplacements,
+		...options.customReplacements
+	]);
+
+	string = transliterate(string, {customReplacements});
+
+	if (options.decamelize) {
+		string = decamelize(string);
+	}
+
+	let patternSlug = /[^a-zA-Z\d]+/g;
+
+	if (options.lowercase) {
+		string = string.toLowerCase();
+		patternSlug = /[^a-z\d]+/g;
+	}
+
+	string = string.replace(patternSlug, options.separator);
+	string = string.replace(/\\/g, '');
+	if (options.separator) {
+		string = removeMootSeparators(string, options.separator);
+	}
+
+	if (shouldPrependUnderscore) {
+		string = `_${string}`;
+	}
+
+	return string;
+};
+
+const counter = () => {
+	const occurrences = new Map();
+
+	const countable = (string, options) => {
+		string = slugify(string, options);
+
+		if (!string) {
+			return '';
+		}
+
+		const stringLower = string.toLowerCase();
+		const numberless = occurrences.get(stringLower.replace(/(?:-\d+?)+?$/, '')) || 0;
+		const counter = occurrences.get(stringLower);
+		occurrences.set(stringLower, typeof counter === 'number' ? counter + 1 : 1);
+		const newCounter = occurrences.get(stringLower) || 2;
+		if (newCounter >= 2 || numberless > 2) {
+			string = `${string}-${newCounter}`;
+		}
+
+		return string;
+	};
+
+	countable.reset = () => {
+		occurrences.clear();
+	};
+
+	return countable;
+};
+
+var slugify_1 = slugify;
+var counter_1 = counter;
+slugify_1.counter = counter_1;
+
+const SLUG_PRESERVE_UNICODE = false;
+const SLUG_SEPARATOR = '_';
+
+/* url-safe processor */
+
+const urlsafeSlugProcessor = (string, opts) => {
+	const { separator = SLUG_SEPARATOR } = opts || {};
+
+	return slugify_1(string, {
+		customReplacements: [	// runs before any other transformations
+			['$', 'DOLLAR'], // `$destroy` & co
+			['-', 'DASH'], // conflicts with `separator`
+		],
+		separator,
+		decamelize: false,
+		lowercase: false
+	})
+	.replace(/DOLLAR/g, '$')
+	.replace(/DASH/g, '-');
+};
+
+/* unicode-preserver processor */
+
+const alphaNumRegex = /[a-zA-Z0-9]/;
+const unicodeRegex = /\p{Letter}/u;
+const isNonAlphaNumUnicode =
+	string => !alphaNumRegex.test(string) && unicodeRegex.test(string);
+
+const unicodeSafeProcessor = (string, opts) => {
+	const { separator = SLUG_SEPARATOR } = opts || {};
+
+	return string.split('')
+	.reduce((accum, char, index, array) => {
+		const type = isNonAlphaNumUnicode(char) ? 'pass' : 'process';
+
+		if (index === 0) {
+			accum.current = {type, string: char};
+		} else if (type === accum.current.type) {
+			accum.current.string += char;
+		} else {
+			accum.chunks.push(accum.current);
+			accum.current = {type, string: char};
+		}
+
+		if (index === array.length - 1) {
+			accum.chunks.push(accum.current);
+		}
+
+		return accum;
+	}, {chunks: [], current: {type: '', string: ''}})
+	.chunks
+	.reduce((accum, chunk) => {
+		const processed = chunk.type === 'process'
+			? urlsafeSlugProcessor(chunk.string)
+			: chunk.string;
+
+		processed.length > 0 && accum.push(processed);
+
+		return accum;
+	}, [])
+	.join(separator);
+};
+
+/* session processor */
+
+const make_session_slug_processor = ({
+	preserve_unicode = SLUG_PRESERVE_UNICODE,
+	separator = SLUG_SEPARATOR
+}) => {
+	const processor = preserve_unicode ? unicodeSafeProcessor : urlsafeSlugProcessor;
+	const seen = new Set();
+
+	return string => {
+		const slug = processor(string, { separator });
+
+		if (seen.has(slug)) throw new Error(`Duplicate slug ${slug}`);
+		seen.add(slug);
+
+		return slug;
+	}
+};
+
+var prism = createCommonjsModule(function (module) {
 /* **********************************************
      Begin prism-core.js
 ********************************************** */
@@ -9899,6 +13570,189 @@ Object.defineProperty(Prism.languages.svelte.tag, 'addInlined', {
 Prism.languages.svelte.tag.addInlined('style', 'css');
 Prism.languages.svelte.tag.addInlined('script', 'javascript');
 
+const langs = {
+	bash: 'bash',
+	html: 'markup',
+	sv: 'svelte',
+	js: 'javascript',
+	css: 'css',
+	diff: 'diff'
+};
+
+function highlight(source, lang) {
+	const plang = langs[lang] || '';
+	const highlighted = plang ? prism.highlight(
+		source,
+		prism.languages[plang],
+		lang,
+	) : source.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+
+	return `<pre class='language-${plang}'><code>${highlighted}</code></pre>`;
+}
+
+// import fs from "fs";
+
+const blockTypes = [
+	"blockquote",
+	"html",
+	"heading",
+	"hr",
+	"list",
+	"listitem",
+	"paragraph",
+	"table",
+	"tablerow",
+	"tablecell",
+];
+
+const make_slug = make_session_slug_processor({
+	preserve_unicode: SLUG_PRESERVE_UNICODE$1,
+	separator: SLUG_SEPARATOR$1,
+});
+
+// export default function get_sections() {
+// TODO: remove - this module not touch the FS
+// return fs
+// 	.readdirSync(`${process.cwd()}/docs/api`)
+// 	.filter((file) => file[0] !== "." && path.extname(file) === ".md")
+// 	.map((file) => {
+// 		const markdown = fs.readFileSync(
+// 			`${process.cwd()}/docs/api/${file}`,
+// 			"utf-8"
+// 		);
+function transform_api(file, markdown) {
+	// THIS IS WHERE IT BEGINS
+	let prev_level = 3;
+	const { content, metadata } = extract_frontmatter(markdown);
+
+	const section_slug = make_slug(metadata.title);
+
+	const sections = [];
+	let section_stack = [sections];
+
+	const renderer = new marked_1.Renderer();
+
+	let block_open = false;
+
+	renderer.link = link_renderer;
+
+	renderer.hr = () => {
+		block_open = true;
+
+		return '<div class="side-by-side"><div class="copy">';
+	};
+
+	renderer.code = (source, lang) => {
+		source = source.replace(/^ +/gm, (match) => match.split("    ").join("\t"));
+
+		const lines = source.split("\n");
+
+		// TODO: this is always null | undefined
+		const meta = extract_metadata(lines[0], lang);
+
+		// TODO: without the meta block these values never change
+		let prefix = "";
+		let className = "code-block";
+
+		// TODO: this path is never taken
+		if (meta) {
+			source = lines.slice(1).join("\n");
+			const filename = meta.filename || (lang === "html" && "App.svelte");
+			if (filename) {
+				prefix = `<span class='filename'>${prefix} ${filename}</span>`;
+				className += " named";
+			}
+		}
+
+		// TODO:
+		if (meta && meta.hidden) return "";
+
+		const html = `<div class='${className}'>${prefix}${highlight(
+			source,
+			lang
+		)}</div>`;
+
+		if (block_open) {
+			block_open = false;
+			return `</div><div class="code">${html}</div></div>`;
+		}
+
+		return html;
+	};
+
+	renderer.heading = (text, level, rawtext) => {
+		let slug;
+
+		const match = /<a href="([^"]+)"[^>]*>(.+)<\/a>/.exec(text);
+		if (match) {
+			slug = match[1];
+			text = match[2];
+		} else {
+			slug = make_slug(rawtext);
+		}
+
+		if (level === 3 || level === 4) {
+			// TODO: code never executed - it was for the svelte 2 docs
+			const title = text
+				.replace(/<\/?code>/g, "")
+				.replace(/\.(\w+)(\((.+)?\))?/, (m, $1, $2, $3) => {
+					if ($3) return `.${$1}(...)`;
+					if ($2) return `.${$1}()`;
+					return `.${$1}`;
+				});
+
+			const prev_section = section_stack[section_stack.length - 1];
+
+			if (level > prev_level) {
+				section_stack.push(
+					prev_section[prev_section.length - 1].sections || []
+				);
+			} else if (level < prev_level) {
+				section_stack.pop();
+			}
+
+			section_stack[section_stack.length - 1].push({
+				slug,
+				title,
+				sections: [],
+			});
+			prev_level = level;
+		}
+
+		return `
+					<h${level}>
+						<span id="${slug}" class="offset-anchor" ${
+			level > 4 ? "data-scrollignore" : ""
+		}></span>
+						<a href="docs#${slug}" class="anchor" aria-hidden="true"></a>
+						${text}
+					</h${level}>`;
+	};
+
+	blockTypes.forEach((type) => {
+		const fn = renderer[type];
+		renderer[type] = function () {
+			return fn.apply(this, arguments);
+		};
+	});
+
+	const html = marked_1(content, { renderer });
+
+	const hashes = {};
+
+	return {
+		content: html.replace(/@@(\d+)/g, (m, id) => hashes[id] || m),
+		title: metadata.title,
+		slug: section_slug,
+		file,
+		sections,
+	};
+}
+
+// console.log(JSON.stringify(transform_api(), null, 2));
+
+var dist = transform_api;
+
 function get_file_with_name(base, type) {
 	return new Promise(async (rs, rj) => {
 		fs_1.promises.readdir(path__default['default'].join(base, type))
@@ -9974,7 +13828,7 @@ async function run() {
 	const release_type =
 		eventName === "release" ? payload.release.tag_name : "next";
 
-	console.log(eventName, payload, process.env);
+	// console.log(eventName, payload, process.env);
 	console.log(__dirname);
 	let webhook_payload;
 
@@ -10009,6 +13863,12 @@ async function run() {
 		}, {});
 
 		console.log(webhook_payload);
+
+		const api = webhook_payload.api.map(({ file, content }) => {
+			return dist(file, content);
+		});
+
+		console.log(api);
 
 		const octokit = github$1.getOctokit(token);
 

@@ -80,7 +80,7 @@ async function run() {
 	const release_type =
 		eventName === "release" ? payload.release.tag_name : "next";
 
-	console.log(eventName, payload, process.env);
+	// console.log(eventName, payload, process.env);
 	console.log(__dirname);
 	let webhook_payload;
 
@@ -115,6 +115,12 @@ async function run() {
 		}, {});
 
 		console.log(webhook_payload);
+
+		const api = webhook_payload.api.map(({ file, content }) => {
+			return transform(file, content);
+		});
+
+		console.log(api);
 
 		const octokit = github.getOctokit(token);
 
