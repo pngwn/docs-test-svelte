@@ -90,7 +90,7 @@ async function run() {
 		console.log(body);
 		console.log(cf_token, `${API_ROOT}${KV_WRITE}`);
 		const x = await put(`${API_ROOT}${KV_WRITE}`, {
-			body: JSON.stringify(body),
+			body: body,
 			headers: {
 				Authorization: `Bearer ${cf_token}`,
 			},
