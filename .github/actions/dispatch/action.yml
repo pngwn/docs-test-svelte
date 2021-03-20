@@ -4,17 +4,14 @@ description: "Dispatch docs to main repo"
 
 inputs:
   base:
-    description: "Location for base documentation"
+    description: "location for base documentation"
     required: true
     default: "docs"
   token:
     description: "token to trigger workflow elsewhere"
     required: true
-  aws_key_id:
-    description: "AWS Key ID"
-    required: true
-  aws_secret_access_key:
-    description: "AWS Secret Access Key"
+  cf_token:
+    description: "Cloudflare API token"
     required: true
 
 runs:

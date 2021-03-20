@@ -2,8 +2,15 @@ import github from "@actions/github";
 import exec from "@actions/exec";
 import core from "@actions/core";
 import transform from "@pngwn/svelte-util-parse-docs";
+import { put } from "httpie";
 import { promises as fs } from "fs";
 import path from "path";
+
+const CF_ID = "03a53ffe7b4926e8f6c4aa5e2ddf6b0f";
+const KV_ID = "e031c432a7d943d39dec45d34020883d";
+
+const API_ROOT = "https://api.cloudflare.com/client/v4/";
+const KV_WRITE = `accounts/${CF_ID}/storage/kv/namespaces/${KV_ID}/bulk`;
 
 function get_file_with_name(base, type) {
 	return new Promise(async (rs, rj) => {
@@ -23,64 +30,20 @@ function read_file_with_meta(base, type, path_name) {
 	});
 }
 
-// function zipDirectory(source, out) {
-// 	const archive = archiver("zip", { zlib: { level: 9 } });
-// 	const stream = fs.createWriteStream(out);
-
-// 	return new Promise((resolve, reject) => {
-// 		archive
-// 			.directory(source, false)
-// 			.on("error", (err) => reject(err))
-// 			.pipe(stream);
-
-// 		stream.on("close", () => resolve());
-// 		archive.finalize();
-// 	});
-// }
-
 async function run() {
 	const base = core.getInput("base");
 	const token = core.getInput("token");
-	// const aws_key_id = core.getInput("aws_key_id");
-	// const aws_secret_access_key = core.getInput("aws_secret_access_key");
+	const cf_token = core.getInput("cf_token");
 
-	// await zipDirectory(base, `${base}.zip`);
-	// const fileContent = fs.readFileSync(`${base}.zip`);
+	const KV_ENDPOINT = make_kvwrite_endpoint(cf_id, kv_);
 
 	const {
 		context: { eventName, payload, ref, repo },
 	} = github;
 
-	// const params = {
-	// 	Bucket: BUCKET_NAME,
-	// 	Key: "cat.jpg", // File name you want to save as in S3
-	// 	Body: fileContent,
-	// };
+	const release_keys =
+		eventName === "release" ? [payload.release.tag_name, "latest"] : ["next"];
 
-	// await exec.exec("zip", [`${base}.zip`, base, "-r"]);
-
-	// await exec.exec("aws", ["configure", "set", "aws_access_key_id", aws_key_id]);
-	// await exec.exec("aws", [
-	// 	"configure",
-	// 	"set",
-	// 	"aws_secret_access_key",
-	// 	aws_secret_access_key,
-	// ]);
-
-	// await exec.exec("aws", [
-	// 	"s3",
-	// 	"sync",
-	// 	`${base}.zip`,
-	// 	`s3://svelte-docs/${repo.repo}@next`,
-	// ]);
-	// aws s3 sync docs.zip s3://my-bucket/svelte@v3.28.0
-
-	// await exec.exec("cat", ["~/.aws/credentials"]);
-
-	const release_type =
-		eventName === "release" ? payload.release.tag_name : "next";
-
-	// console.log(eventName, payload, process.env);
 	console.log(__dirname);
 	let webhook_payload;
 
@@ -106,7 +69,7 @@ async function run() {
 
 		// TODO: can i send a list of file?
 
-		webhook_payload = files.reduce((acc, { type, content, file }) => {
+		const sorted_files = files.reduce((acc, { type, content, file }) => {
 			if (!acc[type]) {
 				return { ...acc, [type]: [{ file, content }] };
 			} else {
@@ -114,7 +77,7 @@ async function run() {
 			}
 		}, {});
 
-		console.log(webhook_payload);
+		console.log(sorted_files);
 
 		const api = webhook_payload.api.map(({ file, content }) => {
 			return transform(file, content);
@@ -122,26 +85,21 @@ async function run() {
 
 		console.log(api);
 
-		const octokit = github.getOctokit(token);
+		const body = release_keys.map((version) => ({
+			key: `${repo.repo}:api:${version}`,
+			value: api,
+		}));
 
+		const x = await put(`${KV_ENDPOINT}${KV_WRITE}`, {
+			body: JSON.stringify(body),
+		});
+		console.log("put: ", x);
 		console.log({
-			type: release_type,
+			type: `${release_keys.map((v) => `${v}: ${repo.repo}:api:${v}`)}`,
 			repo: repo.repo,
 			base,
+			key: `${repo.repo}:api:${version}`,
 		});
-
-		// const x = await octokit.actions.createWorkflowDispatch({
-		// 	owner: "pngwn",
-		// 	repo: "docs-test-shell",
-		// 	workflow_id: "publish_docs.yml",
-		// 	ref,
-		// 	inputs: {
-		// 		type: release_type,
-		// 		repo: repo.repo,
-		// 		base,
-		// 	},
-		// });
-		console.log(x);
 	} catch (e) {
 		console.log("it didn't work", e.message);
 	}

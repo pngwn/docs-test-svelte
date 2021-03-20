@@ -13753,6 +13753,76 @@ function transform_api(file, markdown) {
 
 var dist = transform_api;
 
+function toError(rej, res, err) {
+	err = err || new Error(res.statusMessage);
+	err.statusMessage = res.statusMessage;
+	err.statusCode = res.statusCode;
+	err.headers = res.headers;
+	err.data = res.data;
+	rej(err);
+}
+
+function send(method, uri, opts={}) {
+	return new Promise((res, rej) => {
+		let out = '';
+		opts.method = method;
+		let { redirect=true } = opts;
+		if (uri && !!uri.toJSON) uri = uri.toJSON();
+		Object.assign(opts, typeof uri === 'string' ? Url.parse(uri) : uri);
+		opts.agent = opts.protocol === 'http:' ? http.globalAgent : void 0;
+
+		let req = https.request(opts, r => {
+			r.setEncoding('utf8');
+
+			r.on('data', d => {
+				out += d;
+			});
+
+			r.on('end', () => {
+				let type = r.headers['content-type'];
+				if (type && out && type.includes('application/json')) {
+					try {
+						out = JSON.parse(out, opts.reviver);
+					} catch (err) {
+						return toError(rej, r, err);
+					}
+				}
+				r.data = out;
+				if (r.statusCode >= 400) {
+					toError(rej, r);
+				} else if (r.statusCode > 300 && redirect && r.headers.location) {
+					opts.path = Url.resolve(opts.path, r.headers.location);
+					return send(method, opts.path.startsWith('/') ? opts : opts.path, opts).then(res, rej);
+				} else {
+					res(r);
+				}
+			});
+		});
+
+		req.on('error', rej);
+
+		if (opts.body) {
+			let isObj = typeof opts.body === 'object' && !Buffer.isBuffer(opts.body);
+			let str = isObj ? JSON.stringify(opts.body) : opts.body;
+			isObj && req.setHeader('content-type', 'application/json');
+			req.setHeader('content-length', Buffer.byteLength(str));
+			req.write(str);
+		}
+
+		req.end();
+	});
+}
+
+send.bind(null, 'GET');
+send.bind(null, 'POST');
+send.bind(null, 'PATCH');
+send.bind(null, 'DELETE');
+const put = send.bind(null, 'PUT');
+
+const CF_ID = "03a53ffe7b4926e8f6c4aa5e2ddf6b0f";
+const KV_ID = "e031c432a7d943d39dec45d34020883d";
+const KV_WRITE = `accounts/${CF_ID}/storage/kv/namespaces/${KV_ID}/bulk`;
+
 function get_file_with_name(base, type) {
 	return new Promise(async (rs, rj) => {
 		fs_1.promises.readdir(path__default['default'].join(base, type))
@@ -13771,64 +13841,20 @@ function read_file_with_meta(base, type, path_name) {
 	});
 }
 
-// function zipDirectory(source, out) {
-// 	const archive = archiver("zip", { zlib: { level: 9 } });
-// 	const stream = fs.createWriteStream(out);
-
-// 	return new Promise((resolve, reject) => {
-// 		archive
-// 			.directory(source, false)
-// 			.on("error", (err) => reject(err))
-// 			.pipe(stream);
-
-// 		stream.on("close", () => resolve());
-// 		archive.finalize();
-// 	});
-// }
-
 async function run() {
 	const base = core$1.getInput("base");
-	const token = core$1.getInput("token");
-	// const aws_key_id = core.getInput("aws_key_id");
-	// const aws_secret_access_key = core.getInput("aws_secret_access_key");
+	core$1.getInput("token");
+	core$1.getInput("cf_token");
 
-	// await zipDirectory(base, `${base}.zip`);
-	// const fileContent = fs.readFileSync(`${base}.zip`);
+	const KV_ENDPOINT = make_kvwrite_endpoint(cf_id, kv_);
 
 	const {
 		context: { eventName, payload, ref, repo },
 	} = github$1;
 
-	// const params = {
-	// 	Bucket: BUCKET_NAME,
-	// 	Key: "cat.jpg", // File name you want to save as in S3
-	// 	Body: fileContent,
-	// };
+	const release_keys =
+		eventName === "release" ? [payload.release.tag_name, "latest"] : ["next"];
 
-	// await exec.exec("zip", [`${base}.zip`, base, "-r"]);
-
-	// await exec.exec("aws", ["configure", "set", "aws_access_key_id", aws_key_id]);
-	// await exec.exec("aws", [
-	// 	"configure",
-	// 	"set",
-	// 	"aws_secret_access_key",
-	// 	aws_secret_access_key,
-	// ]);
-
-	// await exec.exec("aws", [
-	// 	"s3",
-	// 	"sync",
-	// 	`${base}.zip`,
-	// 	`s3://svelte-docs/${repo.repo}@next`,
-	// ]);
-	// aws s3 sync docs.zip s3://my-bucket/svelte@v3.28.0
-
-	// await exec.exec("cat", ["~/.aws/credentials"]);
-
-	const release_type =
-		eventName === "release" ? payload.release.tag_name : "next";
-
-	// console.log(eventName, payload, process.env);
 	console.log(__dirname);
 	let webhook_payload;
 
@@ -13854,7 +13880,7 @@ async function run() {
 
 		// TODO: can i send a list of file?
 
-		webhook_payload = files.reduce((acc, { type, content, file }) => {
+		const sorted_files = files.reduce((acc, { type, content, file }) => {
 			if (!acc[type]) {
 				return { ...acc, [type]: [{ file, content }] };
 			} else {
@@ -13862,7 +13888,7 @@ async function run() {
 			}
 		}, {});
 
-		console.log(webhook_payload);
+		console.log(sorted_files);
 
 		const api = webhook_payload.api.map(({ file, content }) => {
 			return dist(file, content);
@@ -13870,26 +13896,21 @@ async function run() {
 
 		console.log(api);
 
-		const octokit = github$1.getOctokit(token);
+		const body = release_keys.map((version) => ({
+			key: `${repo.repo}:api:${version}`,
+			value: api,
+		}));
 
+		const x = await put(`${KV_ENDPOINT}${KV_WRITE}`, {
+			body: JSON.stringify(body),
+		});
+		console.log("put: ", x);
 		console.log({
-			type: release_type,
+			type: `${release_keys.map((v) => `${v}: ${repo.repo}:api:${v}`)}`,
 			repo: repo.repo,
 			base,
+			key: `${repo.repo}:api:${version}`,
 		});
-
-		// const x = await octokit.actions.createWorkflowDispatch({
-		// 	owner: "pngwn",
-		// 	repo: "docs-test-shell",
-		// 	workflow_id: "publish_docs.yml",
-		// 	ref,
-		// 	inputs: {
-		// 		type: release_type,
-		// 		repo: repo.repo,
-		// 		base,
-		// 	},
-		// });
-		console.log(x);
 	} catch (e) {
 		console.log("it didn't work", e.message);
 	}
