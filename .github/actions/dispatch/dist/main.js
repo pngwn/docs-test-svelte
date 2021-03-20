@@ -13909,7 +13909,7 @@ async function run() {
 					url: `${API_BASE}/${repo.repo}/api/${file.replace(
 						".md",
 						""
-					)}:${version}`,
+					)}?q=${version}`,
 				});
 
 				keys.push({
