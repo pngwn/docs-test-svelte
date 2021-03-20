@@ -103,6 +103,7 @@ async function run() {
 		});
 	} catch (e) {
 		console.log("it didn't work", e.message);
+		throw e;
 	}
 
 	console.log("boo, not bad it worked");
