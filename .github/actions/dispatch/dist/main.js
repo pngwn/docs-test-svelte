@@ -13913,7 +13913,7 @@ async function run() {
 				});
 
 				keys.push({
-					key: `${repo.repo}:api:${content.file.replace(".md", "")}:${version}`,
+					key: `${repo.repo}:api:${file.replace(".md", "")}:${version}`,
 					value: JSON.stringify({ title, slug, file, sections, content }),
 				});
 			});
