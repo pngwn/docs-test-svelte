@@ -13887,22 +13887,80 @@ async function run() {
 			}
 		}, {});
 
-		console.log(sorted_files);
+		// console.log(sorted_files);
+
+		const API_BASE = "https://svelte-api.pngwn.workers.dev";
 
 		const api = sorted_files.api.map(({ file, content }) => {
 			return dist(file, content);
 		});
 
-		// console.log(api);
+		const keys = [];
 
-		const body = release_keys.map((version) => ({
-			key: `${repo.repo}:api:${version}`,
-			value: JSON.stringify(api),
-		}));
-		console.log(body);
-		console.log(cf_token, `${API_ROOT}${KV_WRITE}`);
+		release_keys.forEach((version) => {
+			const list = [];
+
+			api.forEach(({ title, slug, file, sections, content }) => {
+				list.push({
+					title,
+					slug,
+					file,
+					sections,
+					url: `${API_BASE}/${docs}/${repo.repo}/api/${file.replace(
+						".md",
+						""
+					)}:${version}`,
+				});
+
+				keys.push({
+					key: `${repo.repo}:api:${content.file.replace(".md", "")}:${version}`,
+					value: JSON.stringify({ title, slug, file, sections, content }),
+				});
+			});
+
+			keys.push({
+				key: `${repo.repo}:api:list:${version}`,
+				value: JSON.stringify(list),
+			});
+
+			keys.push({
+				key: `${repo.repo}:api:${version}`,
+				value: JSON.stringify(api),
+			});
+		});
+
+		// const api_items = release_keys
+		// 	.map((version) =>
+		// 		api.map((content) => ({
+		// 			key: `${repo.repo}:api:${file.replace(".md", "")}:${version}`,
+		// 			value: JSON.stringify(content),
+		// 		}))
+		// 	)
+		// 	.flat();
+
+		// const api_list = release_keys.map((version) => ({
+		// 	key: `${repo.repo}:api:list:${version}`,
+		// 	value: JSON.stringify(
+		// 		api.map(({ title, slug, file, sections }) => ({
+		// 			title,
+		// 			slug,
+		// 			file,
+		// 			sections,
+		// 			url: `${API_BASE}/${docs}/${repo.repo}/${file.replace(".md", "")}`,
+		// 		}))
+		// 	),
+		// }));
+
+		// const api_all = release_keys.map((version) => ({
+		// 	key: `${repo.repo}:api:${version}`,
+		// 	value: JSON.stringify(api),
+		// }));
+		// console.log(body);
+		// console.log(cf_token, `${API_ROOT}${KV_WRITE}`);
+		console.log(keys);
+
 		const x = await put(`${API_ROOT}${KV_WRITE}`, {
-			body: body,
+			body: keys,
 			headers: {
 				Authorization: `Bearer ${cf_token}`,
 			},
