@@ -77,7 +77,7 @@ async function run() {
 
 		// console.log(sorted_files);
 
-		const API_BASE = "https://svelte-api.pngwn.workers.dev";
+		const API_BASE = "https://svelte-api.pngwn.workers.dev/docs";
 
 		const api = sorted_files.api.map(({ file, content }) => {
 			return transform(file, content);
@@ -94,7 +94,7 @@ async function run() {
 					slug,
 					file,
 					sections,
-					url: `${API_BASE}/${docs}/${repo.repo}/api/${file.replace(
+					url: `${API_BASE}/${repo.repo}/api/${file.replace(
 						".md",
 						""
 					)}:${version}`,
