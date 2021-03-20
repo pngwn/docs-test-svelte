@@ -13854,7 +13854,6 @@ async function run() {
 		eventName === "release" ? [payload.release.tag_name, "latest"] : ["next"];
 
 	console.log(__dirname);
-	let webhook_payload;
 
 	try {
 		const dirs = await fs_1.promises.readdir(base);
@@ -13888,7 +13887,7 @@ async function run() {
 
 		console.log(sorted_files);
 
-		const api = webhook_payload.api.map(({ file, content }) => {
+		const api = sorted_files.api.map(({ file, content }) => {
 			return dist(file, content);
 		});
 

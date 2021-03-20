@@ -77,7 +77,7 @@ async function run() {
 
 		console.log(sorted_files);
 
-		const api = webhook_payload.api.map(({ file, content }) => {
+		const api = sorted_files.api.map(({ file, content }) => {
 			return transform(file, content);
 		});
 
