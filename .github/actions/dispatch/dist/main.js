@@ -13846,8 +13846,6 @@ async function run() {
 	core$1.getInput("token");
 	core$1.getInput("cf_token");
 
-	const KV_ENDPOINT = make_kvwrite_endpoint(cf_id, kv_);
-
 	const {
 		context: { eventName, payload, ref, repo },
 	} = github$1;
