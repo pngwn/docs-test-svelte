@@ -13893,12 +13893,13 @@ async function run() {
 			return dist(file, content);
 		});
 
-		console.log(api);
+		// console.log(api);
 
 		const body = release_keys.map((version) => ({
 			key: `${repo.repo}:api:${version}`,
 			value: JSON.stringify(api),
 		}));
+		console.log(body);
 		console.log(cf_token, `${API_ROOT}${KV_WRITE}`);
 		const x = await put(`${API_ROOT}${KV_WRITE}`, {
 			body: JSON.stringify(body),
