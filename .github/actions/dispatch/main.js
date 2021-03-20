@@ -87,9 +87,12 @@ async function run() {
 			key: `${repo.repo}:api:${version}`,
 			value: api,
 		}));
-
+		console.log(`${API_ROOT}${KV_WRITE}`);
 		const x = await put(`${API_ROOT}${KV_WRITE}`, {
 			body: JSON.stringify(body),
+			headers: {
+				Authorization: `Bearer ${cf_token}`,
+			},
 		});
 		console.log("put: ", x);
 		console.log({

@@ -13846,7 +13846,7 @@ function read_file_with_meta(base, type, path_name) {
 async function run() {
 	const base = core$1.getInput("base");
 	core$1.getInput("token");
-	core$1.getInput("cf_token");
+	const cf_token = core$1.getInput("cf_token");
 
 	const {
 		context: { eventName, payload, ref, repo },
@@ -13899,9 +13899,12 @@ async function run() {
 			key: `${repo.repo}:api:${version}`,
 			value: api,
 		}));
-
+		console.log(`${API_ROOT}${KV_WRITE}`);
 		const x = await put(`${API_ROOT}${KV_WRITE}`, {
 			body: JSON.stringify(body),
+			headers: {
+				Authorization: `Bearer ${cf_token}`,
+			},
 		});
 		console.log("put: ", x);
 		console.log({
