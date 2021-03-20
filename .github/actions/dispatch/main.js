@@ -88,7 +88,7 @@ async function run() {
 			value: api,
 		}));
 
-		const x = await put(`${KV_ENDPOINT}${KV_WRITE}`, {
+		const x = await put(`${API_ROOT}${KV_WRITE}`, {
 			body: JSON.stringify(body),
 		});
 		console.log("put: ", x);

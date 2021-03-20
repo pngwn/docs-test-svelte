@@ -13821,6 +13821,8 @@ const put = send.bind(null, 'PUT');
 
 const CF_ID = "03a53ffe7b4926e8f6c4aa5e2ddf6b0f";
 const KV_ID = "e031c432a7d943d39dec45d34020883d";
+
+const API_ROOT = "https://api.cloudflare.com/client/v4/";
 const KV_WRITE = `accounts/${CF_ID}/storage/kv/namespaces/${KV_ID}/bulk`;
 
 function get_file_with_name(base, type) {
@@ -13898,7 +13900,7 @@ async function run() {
 			value: api,
 		}));
 
-		const x = await put(`${KV_ENDPOINT}${KV_WRITE}`, {
+		const x = await put(`${API_ROOT}${KV_WRITE}`, {
 			body: JSON.stringify(body),
 		});
 		console.log("put: ", x);
